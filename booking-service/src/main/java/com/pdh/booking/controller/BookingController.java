@@ -29,12 +29,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,12 +50,14 @@ import jakarta.validation.Valid;
 /**
  * CQRS-based Booking Controller
  * 
- * Handles all booking-related operations using Command Query Responsibility Segregation (CQRS).
- * Uses saga orchestration for booking creation and direct queries for data retrieval.
+ * Handles all booking-related operations using Command Query Responsibility
+ * Segregation (CQRS).
+ * Uses saga orchestration for booking creation and direct queries for data
+ * retrieval.
  * REST calls are only used for backoffice management purposes.
  */
 @RestController
-@RequiredArgsConstructor
+
 @Slf4j
 @Tag(name = "Bookings", description = "Booking management and orchestration operations")
 @SecurityRequirement(name = "oauth2")
@@ -64,59 +70,33 @@ public class BookingController {
     private final BookingSagaOrchestrator bookingSagaOrchestrator;
     private final StorefrontProductDetailsAssembler storefrontProductDetailsAssembler;
     private final ProductDetailsService productDetailsService;
-    @Value("${booking.validation.bypass:true}")
-    private boolean bypassValidation;
-
-    /**
-     * Create a new booking using CQRS and saga orchestration
-     */
-    @Operation(
-        summary = "Create booking (Admin)",
-        description = "Create a new booking using saga orchestration for reliable distributed transaction processing",
-        tags = {"Admin API", "Booking Creation"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"admin"})
-    @OpenApiResponses.CreationApiResponses
-    @PostMapping("/backoffice")
-    public ResponseEntity<BookingResponseDto> createBooking(
-            @Parameter(description = "Booking creation request", required = true)
-            @Valid @RequestBody CreateBookingRequestDto request) {
-        try {
-            log.info("Creating booking with type: {} using CQRS", request.getBookingType());
-
-            // Convert DTO to command
-            CreateBookingCommand command = CreateBookingCommand.builder()
-                    .userId(AuthenticationUtils.getCurrentUserIdFromContext())
-                    .bookingType(request.getBookingType())
-                    .totalAmount(request.getTotalAmount())
-                    .currency(request.getCurrency())
-                    .productDetailsJson(objectMapper.writeValueAsString(request.getProductDetails()))
-                    .notes(request.getNotes())
-                    .bookingSource("ADMIN")
-                    .sagaId(UUID.randomUUID().toString())
-                    .correlationId(UUID.randomUUID().toString())
-                    .build();
-
-            // Execute command via CQRS service
-            Booking createdBooking = bookingCqrsService.createBooking(command);
-
-            // Convert entity to response DTO
-            BookingResponseDto response = bookingDtoMapper.toResponseDto(createdBooking);
-
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("Error creating booking via CQRS: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
+    private final BeanOutputConverter<StorefrontCreateBookingRequestDto> beanOutputConverter;
+    private final String REQUEST_BOOKING_SCHEMA;
+    public BookingController(
+            BookingCqrsService bookingCqrsService,
+            BookingDtoMapper bookingDtoMapper,
+            ObjectMapper objectMapper,
+            BookingService bookingService,
+            BookingSagaOrchestrator bookingSagaOrchestrator,
+            StorefrontProductDetailsAssembler storefrontProductDetailsAssembler,
+            ProductDetailsService productDetailsService) {
+        this.bookingCqrsService = bookingCqrsService;
+        this.bookingDtoMapper = bookingDtoMapper;
+        this.objectMapper = objectMapper;
+        this.bookingService = bookingService;
+        this.bookingSagaOrchestrator = bookingSagaOrchestrator;
+        this.storefrontProductDetailsAssembler = storefrontProductDetailsAssembler;
+        this.productDetailsService = productDetailsService;
+        this.beanOutputConverter = new BeanOutputConverter<>( StorefrontCreateBookingRequestDto.class);
+        this.REQUEST_BOOKING_SCHEMA = this.beanOutputConverter.getJsonSchema();
+        System.out.println(REQUEST_BOOKING_SCHEMA);
     }
 
-    @Operation(
-        summary = "Confirm booking (Storefront)",
-        description = "Mark booking as confirmed after successful payment",
-        tags = {"Public API", "Status Tracking"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"customer"})
+
+
+    @Operation(summary = "Confirm booking (Storefront)", description = "Mark booking as confirmed after successful payment", tags = {
+            "Public API", "Status Tracking" })
+    @SecurityRequirement(name = "oauth2", scopes = { "customer" })
     @PostMapping("/storefront/{bookingId}/confirm")
     public ResponseEntity<BookingStatusResponseDto> confirmBooking(
             @PathVariable UUID bookingId) {
@@ -124,14 +104,18 @@ public class BookingController {
             Booking booking = bookingService.confirmBooking(bookingId);
 
             BookingStatusResponseDto response = BookingStatusResponseDto.builder()
-                .bookingId(booking.getBookingId().toString())
-                .bookingReference(booking.getBookingReference())
-                .status(booking.getStatus())
-                .lastUpdated(booking.getUpdatedAt().toString())
-                .message("Booking confirmed successfully!")
-                .reservationLockedAt(booking.getReservationLockedAt() != null ? booking.getReservationLockedAt().toString() : null)
-                .reservationExpiresAt(booking.getReservationExpiresAt() != null ? booking.getReservationExpiresAt().toString() : null)
-                .build();
+                    .bookingId(booking.getBookingId().toString())
+                    .bookingReference(booking.getBookingReference())
+                    .status(booking.getStatus())
+                    .lastUpdated(booking.getUpdatedAt().toString())
+                    .message("Booking confirmed successfully!")
+                    .reservationLockedAt(
+                            booking.getReservationLockedAt() != null ? booking.getReservationLockedAt().toString()
+                                    : null)
+                    .reservationExpiresAt(
+                            booking.getReservationExpiresAt() != null ? booking.getReservationExpiresAt().toString()
+                                    : null)
+                    .build();
 
             response.setEstimatedCompletion(null);
             response.setProgressPercentage(100);
@@ -145,12 +129,9 @@ public class BookingController {
         }
     }
 
-    @Operation(
-        summary = "Initiate payment for booking (Storefront)",
-        description = "Mark the booking as ready for payment once the customer confirms the intent",
-        tags = {"Public API", "Status Tracking"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"customer"})
+    @Operation(summary = "Initiate payment for booking (Storefront)", description = "Mark the booking as ready for payment once the customer confirms the intent", tags = {
+            "Public API", "Status Tracking" })
+    @SecurityRequirement(name = "oauth2", scopes = { "customer" })
     @PostMapping("/storefront/{bookingId}/payment/initiate")
     public ResponseEntity<BookingStatusResponseDto> initiatePayment(
             @PathVariable UUID bookingId,
@@ -174,8 +155,12 @@ public class BookingController {
                 .status(refreshed.getStatus())
                 .lastUpdated(refreshed.getUpdatedAt() != null ? refreshed.getUpdatedAt().toString() : null)
                 .message("Payment initiation acknowledged. Please complete payment to confirm booking.")
-                .reservationLockedAt(refreshed.getReservationLockedAt() != null ? refreshed.getReservationLockedAt().toString() : null)
-                .reservationExpiresAt(refreshed.getReservationExpiresAt() != null ? refreshed.getReservationExpiresAt().toString() : null)
+                .reservationLockedAt(
+                        refreshed.getReservationLockedAt() != null ? refreshed.getReservationLockedAt().toString()
+                                : null)
+                .reservationExpiresAt(
+                        refreshed.getReservationExpiresAt() != null ? refreshed.getReservationExpiresAt().toString()
+                                : null)
                 .build();
         response.setProgressPercentage(null);
         response.setEstimatedCompletion(null);
@@ -183,23 +168,16 @@ public class BookingController {
         return ResponseEntity.accepted().body(response);
     }
 
-    @Operation(
-        summary = "Get booking history",
-        description = "Retrieve paginated booking history for the authenticated storefront user",
-        tags = {"Public API", "Status Tracking"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"customer"})
+    @Operation(summary = "Get booking history", description = "Retrieve paginated booking history for the authenticated storefront user", tags = {
+            "Public API", "Status Tracking" })
+    @SecurityRequirement(name = "oauth2", scopes = { "customer" })
     @GetMapping("/storefront/history")
-    @org.springframework.ai.tool.annotation.Tool(
-        name = "get_booking_history",
-        description = "Get paginated booking history for the current user. Returns list of bookings with details, " +
-                "status, and booking information. Default page=0, size=10."
-    )
+    @McpTool(name = "get_booking_history", description = "Get paginated booking history for the current user. Returns list of bookings with details, "
+            +
+            "status, and booking information. Default page=0, size=10.")
     public ResponseEntity<BookingHistoryResponseDto> getBookingHistory(
-            @org.springframework.ai.tool.annotation.ToolParam(description = "Page number (0-based, default: 0)", required = false)
-            @RequestParam(name = "page", defaultValue = "0") int page,
-            @org.springframework.ai.tool.annotation.ToolParam(description = "Number of results per page (default: 10)", required = false)
-            @RequestParam(name = "size", defaultValue = "10") int size) {
+            @McpToolParam(description = "Page number (0-based, default: 0)", required = false) @RequestParam(name = "page", defaultValue = "0") int page,
+            @McpToolParam(description = "Number of results per page (default: 10)", required = false) @RequestParam(name = "size", defaultValue = "10") int size) {
         try {
             UUID userId = AuthenticationUtils.getCurrentUserIdFromContext();
 
@@ -210,13 +188,13 @@ public class BookingController {
             Page<BookingHistoryItemDto> historyPage = bookingService.getBookingHistory(userId, pageable);
 
             BookingHistoryResponseDto response = BookingHistoryResponseDto.builder()
-                .items(historyPage.getContent())
-                .page(historyPage.getNumber())
-                .size(historyPage.getSize())
-                .totalElements(historyPage.getTotalElements())
-                .totalPages(historyPage.getTotalPages())
-                .hasNext(historyPage.hasNext())
-                .build();
+                    .items(historyPage.getContent())
+                    .page(historyPage.getNumber())
+                    .size(historyPage.getSize())
+                    .totalElements(historyPage.getTotalElements())
+                    .totalPages(historyPage.getTotalPages())
+                    .hasNext(historyPage.hasNext())
+                    .build();
 
             return ResponseEntity.ok(response);
 
@@ -229,21 +207,17 @@ public class BookingController {
     /**
      * Get booking by saga ID (Backoffice/Admin)
      */
-    @Operation(
-        summary = "Get booking by saga ID",
-        description = "Retrieve booking details using the saga ID for administrative purposes",
-        tags = {"Admin API"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"admin"})
+    @Operation(summary = "Get booking by saga ID", description = "Retrieve booking details using the saga ID for administrative purposes", tags = {
+            "Admin API" })
+    @SecurityRequirement(name = "oauth2", scopes = { "admin" })
     @OpenApiResponses.StandardApiResponsesWithNotFound
     @GetMapping("/saga/{sagaId}")
     public ResponseEntity<BookingResponseDto> getBookingBySagaId(
-            @Parameter(description = "Saga ID", required = true, example = "saga-12345")
-            @PathVariable String sagaId) {
+            @Parameter(description = "Saga ID", required = true, example = "saga-12345") @PathVariable String sagaId) {
         try {
             String userId = AuthenticationUtils.extractUserId();
             Optional<Booking> booking = bookingCqrsService.getBookingBySagaId(sagaId, userId);
-            
+
             return booking.map(b -> {
                 BookingResponseDto response = bookingDtoMapper.toResponseDto(b);
                 return ResponseEntity.ok(response);
@@ -259,18 +233,21 @@ public class BookingController {
     /**
      * Create a new booking using CQRS and saga orchestration (Storefront)
      */
-    @Operation(
-        summary = "Create booking (Customer)",
-        description = "Create a new booking from the customer storefront using saga orchestration",
-        tags = {"Public API", "Booking Creation"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"customer"})
+    @McpTool(generateOutputSchema = true, title = "Create booking", description = "Create a new booking from the customer storefront using saga orchestration")
+
+    @Operation(summary = "Create booking (Customer)", description = "Create a new booking from the customer storefront using saga orchestration", tags = {
+            "Public API", "Booking Creation" })
+    @SecurityRequirement(name = "oauth2", scopes = { "customer" })
     @OpenApiResponses.CreationApiResponses
     @PostMapping("/storefront")
-
     public ResponseEntity<StorefrontBookingResponseDto> createStorefrontBooking(
-            @Parameter(description = "Storefront booking creation request", required = true)
-            @Valid @RequestBody StorefrontCreateBookingRequestDto request) {
+            @Parameter(description = "Storefront booking creation request", required = true) 
+            @Valid @RequestBody
+            @McpToolParam(
+                description = "Create a new booking for flights, hotels, or combo packages. Include flightSelection for FLIGHT/COMBO bookings, hotelSelection for HOTEL/COMBO bookings. Total amount must match the sum of selected services."
+
+            ) 
+            StorefrontCreateBookingRequestDto request) {
         try {
             log.info("Creating storefront booking with type: {} ", request.getBookingType());
 
@@ -284,7 +261,7 @@ public class BookingController {
                     .currency(request.getCurrency())
                     .productDetailsJson(productDetailsJson)
                     .notes(request.getNotes())
-                    .bookingSource("STOREFRONT")
+                    .bookingSource(request.getBookingSource() != null ? request.getBookingSource() : "STOREFRONT")
                     .sagaId(UUID.randomUUID().toString())
                     .correlationId(UUID.randomUUID().toString())
                     .build();
@@ -300,9 +277,9 @@ public class BookingController {
         } catch (Exception e) {
             log.error("Error creating storefront booking via CQRS: {}", e.getMessage(), e);
             StorefrontBookingResponseDto errorResponse = StorefrontBookingResponseDto.builder()
-                .error("An unexpected error occurred: " + e.getMessage())
-                .errorCode("BOOKING_CREATION_ERROR")
-                .build();
+                    .error("An unexpected error occurred: " + e.getMessage())
+                    .errorCode("BOOKING_CREATION_ERROR")
+                    .build();
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
@@ -310,21 +287,17 @@ public class BookingController {
     /**
      * Get booking by saga ID (Storefront) using CQRS
      */
-    @Operation(
-        summary = "Get booking by saga ID (Customer)",
-        description = "Retrieve booking details using the saga ID for customer storefront",
-        tags = {"Public API"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"customer"})
+    @Operation(summary = "Get booking by saga ID (Customer)", description = "Retrieve booking details using the saga ID for customer storefront", tags = {
+            "Public API" })
+    @SecurityRequirement(name = "oauth2", scopes = { "customer" })
     @OpenApiResponses.StandardApiResponsesWithNotFound
     @GetMapping("/storefront/saga/{sagaId}")
     public ResponseEntity<StorefrontBookingResponseDto> getStorefrontBookingBySagaId(
-            @Parameter(description = "Saga ID", required = true, example = "saga-12345")
-            @PathVariable String sagaId) {
+            @Parameter(description = "Saga ID", required = true, example = "saga-12345") @PathVariable String sagaId) {
         try {
             UUID userId = AuthenticationUtils.getCurrentUserIdFromContext();
             Optional<Booking> booking = bookingCqrsService.getBookingBySagaId(sagaId, userId.toString());
-            
+
             return booking.map(b -> {
                 StorefrontBookingResponseDto response = bookingDtoMapper.toStorefrontResponseDto(b);
                 return ResponseEntity.ok(response);
@@ -335,28 +308,20 @@ public class BookingController {
         }
     }
 
-
     /**
      * Get booking status for polling (Storefront) using CQRS
      * Used by frontend to check validation progress
      */
-    @org.springframework.ai.tool.annotation.Tool(
-        name = "get_booking_status",
-        description = "Get the current status of a booking by sagaId. Returns status (PENDING/CONFIRMED/COMPLETED/FAILED/CANCELLED), " +
-                "booking details, and validation progress. Use this to track booking creation progress."
-    )
-    @Operation(
-        summary = "Get booking status",
-        description = "Poll booking status to track validation and processing progress",
-        tags = {"Public API", "Status Tracking"}
-    )
-    @SecurityRequirement(name = "oauth2", scopes = {"customer"})
+    @org.springframework.ai.tool.annotation.Tool(name = "get_booking_status", description = "Get the current status of a booking by sagaId. Returns status (PENDING/CONFIRMED/COMPLETED/FAILED/CANCELLED), "
+            +
+            "booking details, and validation progress. Use this to track booking creation progress.")
+    @Operation(summary = "Get booking status", description = "Poll booking status to track validation and processing progress", tags = {
+            "Public API", "Status Tracking" })
+    @SecurityRequirement(name = "oauth2", scopes = { "customer" })
     @OpenApiResponses.StandardApiResponsesWithNotFound
     @GetMapping("/storefront/{bookingId}/status")
     public ResponseEntity<BookingStatusResponseDto> getBookingStatus(
-            @Parameter(description = "Booking ID", required = true, example = "123e4567-e89b-12d3-a456-426614174000")
-            @org.springframework.ai.tool.annotation.ToolParam(description = "The booking ID (UUID) to check status for")
-            @PathVariable UUID bookingId) {
+            @Parameter(description = "Booking ID", required = true, example = "123e4567-e89b-12d3-a456-426614174000") @org.springframework.ai.tool.annotation.ToolParam(description = "The booking ID (UUID) to check status for") @PathVariable UUID bookingId) {
         try {
             UUID userId = AuthenticationUtils.getCurrentUserIdFromContext();
             Optional<Booking> bookingOpt = bookingCqrsService.getBookingById(bookingId, userId);
@@ -368,20 +333,25 @@ public class BookingController {
             Booking booking = bookingOpt.get();
 
             BookingStatus effectiveStatus = booking.getStatus();
-            if (bypassValidation && effectiveStatus == BookingStatus.VALIDATION_PENDING) {
-                effectiveStatus = BookingStatus.PENDING;
-            }
+            // if (bypassValidation && effectiveStatus == BookingStatus.VALIDATION_PENDING)
+            // {
+            // effectiveStatus = BookingStatus.PENDING;
+            // }
 
             String reason = firstNonBlank(booking.getCancellationReason(), booking.getCompensationReason());
             BookingStatusResponseDto response = BookingStatusResponseDto.builder()
-                .bookingId(booking.getBookingId().toString())
-                .bookingReference(booking.getBookingReference())
-                .status(effectiveStatus)
-                .lastUpdated(booking.getUpdatedAt() != null ? booking.getUpdatedAt().toString() : null)
-                .progressPercentage(resolveProgress(effectiveStatus))
-                .reservationLockedAt(booking.getReservationLockedAt() != null ? booking.getReservationLockedAt().toString() : null)
-                .reservationExpiresAt(booking.getReservationExpiresAt() != null ? booking.getReservationExpiresAt().toString() : null)
-                .build();
+                    .bookingId(booking.getBookingId().toString())
+                    .bookingReference(booking.getBookingReference())
+                    .status(effectiveStatus)
+                    .lastUpdated(booking.getUpdatedAt() != null ? booking.getUpdatedAt().toString() : null)
+                    .progressPercentage(resolveProgress(effectiveStatus))
+                    .reservationLockedAt(
+                            booking.getReservationLockedAt() != null ? booking.getReservationLockedAt().toString()
+                                    : null)
+                    .reservationExpiresAt(
+                            booking.getReservationExpiresAt() != null ? booking.getReservationExpiresAt().toString()
+                                    : null)
+                    .build();
 
             switch (effectiveStatus) {
                 case VALIDATION_PENDING -> {
@@ -400,7 +370,8 @@ public class BookingController {
                 case PAID -> response.setMessage("Payment completed successfully!");
                 case PAYMENT_FAILED -> response.setMessage(reason != null ? reason : "Payment processing failed");
                 case CANCELLED -> response.setMessage(reason != null ? reason : "Booking has been cancelled");
-                case VALIDATION_FAILED -> response.setMessage(reason != null ? reason : "Product availability validation failed");
+                case VALIDATION_FAILED ->
+                    response.setMessage(reason != null ? reason : "Product availability validation failed");
                 case FAILED -> response.setMessage(reason != null ? reason : "Booking processing failed");
                 default -> response.setMessage("Unknown status");
             }

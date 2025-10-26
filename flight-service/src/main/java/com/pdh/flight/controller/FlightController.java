@@ -30,7 +30,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -90,39 +89,39 @@ public class FlightController {
 
     @Tool(name = "search_flights", description = "Search flights with filters for origin, destination, dates, airline, price range, and duration.")
     public ResponseEntity<Map<String, Object>> searchFlights(
-            @ToolParam(description = "Origin airport, city, or IATA code", required = false)
+            @Schema(description = "Origin airport, city, or IATA code", example = "HAN")
             @RequestParam(required = false) String origin,
-            @ToolParam(description = "Destination airport, city, or IATA code", required = false)
+            @Schema(description = "Destination airport, city, or IATA code", example = "SGN")
             @RequestParam(required = false) String destination,
-            @ToolParam(description = "Airline name filter", required = false)
+            @Schema(description = "Airline name filter", example = "Vietnam Airlines")
             @RequestParam(required = false) String airlineName,
-            @ToolParam(description = "Airline IATA code filter", required = false)
+            @Schema(description = "Airline IATA code filter", example = "VN")
             @RequestParam(required = false) String airlineCode,
-            @ToolParam(description = "Departure date in YYYY-MM-DD format", required = false)
+            @Schema(description = "Departure date in YYYY-MM-DD format", example = "2024-12-25", pattern = "^\\d{4}-\\d{2}-\\d{2}$")
             @RequestParam(required = false) String departureDate,
-            @ToolParam(description = "Return date in YYYY-MM-DD format (for round-trip)",  required = false)
+            @Schema(description = "Return date in YYYY-MM-DD format (for round-trip)", example = "2024-12-30", pattern = "^\\d{4}-\\d{2}-\\d{2}$")
             @RequestParam(required = false) String returnDate,
-            @ToolParam(description = "Number of passengers")
+            @Schema(description = "Number of passengers", example = "1", minimum = "1", maximum = "9", defaultValue = "1")
             @RequestParam(defaultValue = "1") Integer passengers,
-            @ToolParam(description = "Seat class")
+            @Schema(description = "Seat class", example = "ECONOMY", allowableValues = {"ECONOMY", "BUSINESS", "FIRST"}, defaultValue = "ECONOMY")
             @RequestParam(defaultValue = "ECONOMY") String seatClass,
-            @ToolParam(description = "Minimum total fare")
+            @Schema(description = "Minimum total fare in VND", example = "1000000", minimum = "0")
             @RequestParam(required = false) BigDecimal minPrice,
-            @ToolParam(description = "Maximum total fare")
+            @Schema(description = "Maximum total fare in VND", example = "5000000", minimum = "0")
             @RequestParam(required = false) BigDecimal maxPrice,
-            @ToolParam(description = "Minimum duration in minutes")
+            @Schema(description = "Minimum duration in minutes", example = "60", minimum = "0")
             @RequestParam(required = false) Integer minDuration,
-            @ToolParam(description = "Maximum duration in minutes")
+            @Schema(description = "Maximum duration in minutes", example = "480", minimum = "0")
             @RequestParam(required = false) Integer maxDuration,
-            @ToolParam(description = "Sort by criteria (price, duration, departure, arrival")
+            @Schema(description = "Sort by criteria", example = "departure", allowableValues = {"price", "duration", "departure", "arrival"}, defaultValue = "departure")
             @RequestParam(defaultValue = "departure") String sortBy,
-            @ToolParam(description = "Filter by airline ID")
+            @Schema(description = "Filter by airline ID", example = "1", minimum = "1")
             @RequestParam(required = false) Long airlineId,
-            @ToolParam(description = "Filter by departure airport ID")
+            @Schema(description = "Filter by departure airport ID", example = "1", minimum = "1")
             @RequestParam(required = false) Long departureAirportId,
-            @ToolParam(description = "Page number (1-based)")
+            @Schema(description = "Page number (1-based)", example = "1", minimum = "1", defaultValue = "1")
             @RequestParam(defaultValue = "1") Integer page,
-            @ToolParam(description = "Number of results per page")
+            @Schema(description = "Number of results per page", example = "20", minimum = "1", maximum = "100", defaultValue = "20")
             @RequestParam(defaultValue = "20") Integer limit) {
 
         log.info("Flight search request: origin={}, destination={}, departureDate={}, airlineName={}, minPrice={}, maxPrice={}, seatClass={}",

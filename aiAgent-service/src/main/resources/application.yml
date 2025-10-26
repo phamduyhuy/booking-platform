@@ -5,11 +5,7 @@ server:
   tomcat:
     max-http-form-post-size: 20MB
     max-swallow-size: 20MB
-keycloak:
-  client-id: storefront-bff
-  client-secret: 75eYfom5gp8FxX09a12MtZWKpAvwAA2U
-  username: phamduyhuy
-  password: Tun!8111474652
+
   # Vector store configuration for default profile
 
 # OpenAPI Documentation Configuration
@@ -42,7 +38,7 @@ spring:
       enabled: true
   autoconfigure:
     exclude:
-      - org.springframework.ai.mcp.client.autoconfigure.SseWebFluxTransportAutoConfiguration
+      - org.springframework.ai.mcp.client.webflux.autoconfigure.SseWebFluxTransportAutoConfiguration
   jpa:
     hibernate:
       ddl-auto: validate
@@ -264,36 +260,38 @@ spring:
     retry:
       exclude-on-http-codes: 429
       on-client-errors: true
-
     model:
       embedding: ollama
-      
+
     vectorstore:
       elasticsearch:
-
         dimensions: 768
         similarity: cosine
-        initialize-schema: true     
+        initialize-schema: true
+
     ollama:
       base-url: http://ollama:11434
       embedding:
         options:
           model: nomic-embed-text:latest
-
-
-          
     mistralai:
       api-key: ${MISTRAL_API_KEY}
       chat:
         options:
+
           model: mistral-medium-2508
           temperature: 0.0
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY}
 
+        chat:
+          options:
+            model: gemini-2.5-flash-lite
+            temperature: 0.0
+            response-mime-type: application/json
 
-            
-        
     mcp:
-
       client:
         enabled: true
         version: 1.0.0
@@ -360,7 +358,8 @@ spring:
                 BRAVE_API_KEY: ${BRAVE_API_KEY}
                 BRAVE_MCP_DISABLED_TOOLS: brave_news_search brave_web_search brave_summarizer	
         initialized: true
-  
+
+
 
 
 app:

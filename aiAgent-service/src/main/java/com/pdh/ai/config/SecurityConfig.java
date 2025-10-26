@@ -9,8 +9,11 @@ import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
 
-import org.springframework.ai.mcp.client.autoconfigure.NamedClientMcpTransport;
-import org.springframework.ai.mcp.client.autoconfigure.properties.McpSseClientProperties;
+
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import org.springframework.ai.mcp.client.common.autoconfigure.NamedClientMcpTransport;
+import org.springframework.ai.mcp.client.common.autoconfigure.properties.McpSseClientProperties;
+import org.springframework.ai.mcp.client.webflux.autoconfigure.SseWebFluxTransportAutoConfiguration;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -72,7 +75,7 @@ public class SecurityConfig{
                     ? serverParameters.getValue().sseEndpoint() : "/sse";
             var transport = WebFluxSseClientTransport.builder(webClientBuilder.apply(oauth2Client.oauth2Configuration()))
                     .sseEndpoint(sseEndpoint)
-                    .objectMapper(objectMapper)
+                    .jsonMapper(new JacksonMcpJsonMapper(objectMapper))
                     .build();
             sseTransports.add(new NamedClientMcpTransport(serverParameters.getKey(), transport));
         }

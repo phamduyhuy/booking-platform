@@ -356,13 +356,10 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
                 return next;
             });
 
-            const shouldRefreshConversations = !conversationId || finalResponse.conversationId !== conversationId;
-
-            if (shouldRefreshConversations) {
-                refreshChatConversations().catch((err) => {
-                    console.error('Failed to refresh conversations:', err);
-                });
-            }
+            // Always refresh conversations after AI response to update sidebar
+            refreshChatConversations().catch((err) => {
+                console.error('Failed to refresh conversations:', err);
+            });
 
             currentAssistantMessageIdRef.current = null;
 

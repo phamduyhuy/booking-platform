@@ -27,6 +27,7 @@
         <module>notification-service</module>
         <module>aiAgent-service</module>
         <module>media-service</module>
+<!--        <module>recommendation</module>-->
     </modules>
     <properties>
         <java.version>21</java.version>

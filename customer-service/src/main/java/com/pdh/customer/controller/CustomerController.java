@@ -79,7 +79,12 @@ public class CustomerController {
         CustomerVm customer = customerService.getCustomerProfile(userId);
         return ResponseEntity.ok(customer);
     }
+    @GetMapping("/storefront/profile/{userId}")
+    public ResponseEntity<CustomerVm> getCustomerProfile(@PathVariable String userId) {
 
+        CustomerVm customer = customerService.getCustomerProfile(userId);
+        return ResponseEntity.ok(customer);
+    }
     @PutMapping("/storefront/profile")
     public ResponseEntity<Void> updateCustomerProfile(@Valid @RequestBody CustomerProfileRequestVm customerProfileRequestVm) {
         String userId = AuthenticationUtils.extractUserId();

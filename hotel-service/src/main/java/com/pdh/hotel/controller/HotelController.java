@@ -29,8 +29,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springaicommunity.mcp.annotation.McpTool;
 import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -147,37 +147,37 @@ public class HotelController {
      * GET /hotels/storefront/search?destination=Ho Chi Minh City&checkInDate=2024-02-15&checkOutDate=2024-02-17&guests=2&rooms=1
      */
     @GetMapping("/storefront/search")
-    @Tool(name = "search_hotels", description = "Search hotels by destination(required = false), stay dates (required = false), price range (required = false), room type (required = false), " +
+    @McpTool(name = "search_hotels", description = "Search hotels by destination(required = false), stay dates (required = false), price range (required = false), room type (required = false), " +
             "amenities (required = false), and rating (required = false) " +
             "filters with pagination (default if user not provide: guests=2 rooms=1, page=1, page_size=20) support.")
     public ResponseEntity<Map<String, Object>> searchHotels(
-            @ToolParam(description = "Destination city",required = false)
+            @Schema(description = "Destination city", example = "Ho Chi Minh City")
             @RequestParam(required = false) String destination,
-            @ToolParam(description = "Hotel name", required = false)
+            @Schema(description = "Hotel name", example = "Rex Hotel Saigon")
             @RequestParam(required = false) String hotelName,
-            @ToolParam(description = "Room type", required = false)
+            @Schema(description = "Room type", example = "Deluxe", allowableValues = {"Standard", "Deluxe", "Suite", "Executive"})
             @RequestParam(required = false) String roomType,
-            @ToolParam(description = "List of amenities", required = false)
+            @Schema(description = "List of amenities", example = "wifi,pool,gym")
             @RequestParam(required = false) List<String> amenities,
-            @ToolParam(description = "Minimum price", required = false)
+            @Schema(description = "Minimum price per night in VND", example = "500000", minimum = "0")
             @RequestParam(required = false) BigDecimal minPrice,
-            @ToolParam(description = "Maximum price", required = false)
+            @Schema(description = "Maximum price per night in VND", example = "5000000", minimum = "0")
             @RequestParam(required = false) BigDecimal maxPrice,
-            @ToolParam(description = "Minimum rating", required = false)
+            @Schema(description = "Minimum rating (1-5 stars)", example = "3", minimum = "1", maximum = "5")
             @RequestParam(required = false) BigDecimal minRating,
-            @ToolParam(description = "Maximum rating", required = false)
+            @Schema(description = "Maximum rating (1-5 stars)", example = "5", minimum = "1", maximum = "5")
             @RequestParam(required = false) BigDecimal maxRating,
-            @ToolParam(description = "Check-in date (YYYY-MM-DD)", required = false)
+            @Schema(description = "Check-in date (YYYY-MM-DD)", example = "2024-12-25", pattern = "^\\d{4}-\\d{2}-\\d{2}$")
             @RequestParam(required = false) String checkInDate,
-            @ToolParam(description = "Check-out date (YYYY-MM-DD)", required = false)
+            @Schema(description = "Check-out date (YYYY-MM-DD)", example = "2024-12-30", pattern = "^\\d{4}-\\d{2}-\\d{2}$")
             @RequestParam(required = false) String checkOutDate,
-            @ToolParam(description = "Number of guests (default: 2)")
+            @Schema(description = "Number of guests", example = "2", minimum = "1", maximum = "10", defaultValue = "2")
             @RequestParam(defaultValue = "2") Integer guests,
-            @ToolParam(description = "Number of rooms (default: 1)")
+            @Schema(description = "Number of rooms", example = "1", minimum = "1", maximum = "5", defaultValue = "1")
             @RequestParam(defaultValue = "1") Integer rooms,
-            @ToolParam(description = "Page number (1-based, default: 1)")
+            @Schema(description = "Page number (1-based)", example = "1", minimum = "1", defaultValue = "1")
             @RequestParam(defaultValue = "1") Integer page,
-            @ToolParam(description = "Number of results per page (default: 20)")
+            @Schema(description = "Number of results per page", example = "20", minimum = "1", maximum = "100", defaultValue = "20")
             @RequestParam(defaultValue = "20") Integer limit) {
 
         log.info("Hotel search request: destination={}, hotelName={}, roomType={}, minPrice={}, maxPrice={}, checkIn={}, checkOut={}, guests={}, rooms={}",
@@ -334,17 +334,17 @@ public class HotelController {
     }
 
     @GetMapping("/storefront/availability")
-    @Tool(name = "check_hotel_availability", description = "Check if a hotel room type has enough inventory for the requested stay dates.")
+    @McpTool(name = "check_hotel_availability", description = "Check if a hotel room type has enough inventory for the requested stay dates.")
     public ResponseEntity<Map<String, Object>> checkHotelAvailability(
-            @ToolParam(description = "Hotel identifier")
+            @Schema(description = "Hotel identifier", example = "1", minimum = "1", required = true)
             @RequestParam Long hotelId,
-            @ToolParam(description = "Room type name")
+            @Schema(description = "Room type name", example = "Deluxe", required = true)
             @RequestParam String roomType,
-            @ToolParam(description = "Check-in date in YYYY-MM-DD format")
+            @Schema(description = "Check-in date in YYYY-MM-DD format", example = "2024-12-25", pattern = "^\\d{4}-\\d{2}-\\d{2}$", required = true)
             @RequestParam String checkInDate,
-            @ToolParam(description = "Check-out date in YYYY-MM-DD format")
+            @Schema(description = "Check-out date in YYYY-MM-DD format", example = "2024-12-30", pattern = "^\\d{4}-\\d{2}-\\d{2}$", required = true)
             @RequestParam String checkOutDate,
-            @ToolParam(description = "Number of rooms requested")
+            @Schema(description = "Number of rooms requested", example = "1", minimum = "1", maximum = "10", defaultValue = "1")
             @RequestParam(defaultValue = "1") Integer rooms) {
 
         if (hotelId == null) {
