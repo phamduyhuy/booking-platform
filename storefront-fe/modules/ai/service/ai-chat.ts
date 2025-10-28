@@ -187,6 +187,29 @@ class AiChatService {
     };
   }
 
+  private mapPayloadToChatMessageResponse(
+    payload: StructuredChatPayload,
+    extras: { userMessage: string; conversationId: string; requestId?: string }
+  ): ChatMessageResponse {
+    const suggestionsRaw = payload.nextRequestSuggestions ?? payload.next_request_suggestions;
+    const suggestions = Array.isArray(suggestionsRaw) ? suggestionsRaw : [];
+
+    return {
+      type: 'RESPONSE',
+      userId: '',
+      requestId: extras.requestId,
+      conversationId: extras.conversationId,
+      userMessage: extras.userMessage,
+      aiResponse: payload.message ?? '',
+      results: payload.results ?? [],
+      status: 'Completed',
+      timestamp: new Date().toISOString(),
+      nextRequestSuggestions: suggestions,
+      requiresConfirmation: payload.requiresConfirmation,
+      confirmationContext: payload.confirmationContext,
+    };
+  }
+
   async streamPrompt(
     message: string,
     options: {
@@ -236,6 +259,40 @@ class AiChatService {
     });
   }
 
+  async sendPromptRest(
+    message: string,
+    options: { conversationId?: string; requestId?: string } = {}
+  ): Promise<ChatMessageResponse> {
+    const trimmed = message.trim();
+    if (!trimmed) {
+      throw new Error('Message cannot be empty');
+    }
+
+    const conversationId = options.conversationId ?? this.generateConversationId();
+
+    try {
+      const restPayload: ChatMessageRequest = {
+        message: trimmed,
+        conversationId,
+        timestamp: Date.now(),
+      };
+
+      const restResponse = await apiClient.post<StructuredChatPayload>(
+        `${this.baseUrl}/chat/message`,
+        restPayload
+      );
+
+      return this.mapPayloadToChatMessageResponse(restResponse, {
+        userMessage: trimmed,
+        conversationId,
+        requestId: options.requestId,
+      });
+    } catch (error: any) {
+      const messageText = error?.response?.data?.message || error?.message || 'Không thể gửi tin nhắn lúc này';
+      throw new Error(messageText);
+    }
+  }
+
   /**
    * Send a message to the AI chatbot (Synchronous - waits for complete response)
    * Uses REST API with Agentic Workflow Orchestration (Routing + Parallelization + Evaluation)
@@ -275,24 +332,24 @@ class AiChatService {
 
       // Attempt REST fallback if WebSocket fails
       try {
-        const restPayload: ChatMessageRequest = {
-          message: trimmed,
-          conversationId,
-          timestamp: Date.now(),
-        };
-        const restResponse = await apiClient.post<StructuredChatPayload>(
-          `${this.baseUrl}/chat/message`,
-          restPayload
-        );
-
-        return this.mapPayloadToChatResponse(restResponse, {
+        const fallback = await this.sendPromptRest(message, { conversationId });
+        const suggestions = fallback.nextRequestSuggestions ?? fallback.next_request_suggestions ?? [];
+        return {
           userMessage: message,
-          conversationId,
-        });
+          aiResponse: fallback.aiResponse ?? '',
+          conversationId: fallback.conversationId ?? conversationId,
+          requestId: fallback.requestId,
+          userId: fallback.userId,
+          timestamp: this.normalizeTimestamp(fallback.timestamp),
+          results: fallback.results ?? [],
+          nextRequestSuggestions: suggestions,
+          requiresConfirmation: fallback.requiresConfirmation,
+          confirmationContext: fallback.confirmationContext,
+        };
       } catch (restError: any) {
         console.error('AI Chat REST fallback error:', restError);
       }
-      
+
       // Return a fallback response
       return {
         userMessage: message,

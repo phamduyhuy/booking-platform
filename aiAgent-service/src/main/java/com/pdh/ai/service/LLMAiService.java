@@ -43,8 +43,8 @@ public class LLMAiService implements AiService {
         String conversationKey = formatConversationKey(actualUserId, conversationId);
         Instant now = Instant.now();
 
-        ChatMessage parent = chatMessageRepository
-                .findTopByConversationIdOrderByTimestampDesc(conversationKey)
+        ChatMessage conversationRoot = chatMessageRepository
+                .findFirstByConversationIdAndParentMessageIsNullOrderByTimestampAsc(conversationKey)
                 .orElse(null);
 
         ChatMessage userMessage = ChatMessage.builder()
@@ -55,15 +55,14 @@ public class LLMAiService implements AiService {
                 .build();
 
         ChatMessage savedUserMessage;
-        if (parent == null) {
+        if (conversationRoot == null) {
             userMessage.setTitle(defaultTitle(message));
             savedUserMessage = chatMessageRepository.save(userMessage);
+            conversationRoot = savedUserMessage;
         } else {
-            userMessage.setParentMessage(parent);
+            userMessage.setParentMessage(conversationRoot);
             savedUserMessage = chatMessageRepository.save(userMessage);
         }
-
-        final ChatMessage conversationRoot = resolveConversationRoot(parent, savedUserMessage);
 
         StructuredChatPayload payload = coreAgent.processSyncStructured(message, conversationKey)
                 .map(this::ensureValidPayload)
@@ -226,18 +225,6 @@ public class LLMAiService implements AiService {
         }
     }
 
-    private ChatMessage resolveConversationRoot(ChatMessage parent, ChatMessage fallback) {
-        if (parent == null) {
-            return fallback;
-        }
-
-        ChatMessage current = parent;
-        while (current.getParentMessage() != null) {
-            current = current.getParentMessage();
-        }
-
-        return current != null ? current : fallback;
-    }
 
     /**
      * Ensures payload has valid fields.

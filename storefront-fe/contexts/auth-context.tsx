@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { AuthClient, UserInfo } from '@/lib/auth-client'
 import { aiChatService } from '@/modules/ai'
 import type { ChatConversationSummary } from '@/modules/ai'
@@ -23,9 +23,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [chatConversations, setChatConversations] = useState<ChatConversationSummary[]>([])
+  const userRef = useRef<UserInfo | null>(null)
+
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
 
   const loadChatConversations = useCallback(async (currentUser?: UserInfo | null) => {
-    const resolvedUser = currentUser ?? user
+    const resolvedUser = currentUser ?? userRef.current
     if (!resolvedUser) {
       setChatConversations([])
       return
@@ -87,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Preserve existing conversations to avoid clearing sidebar on transient failures
       setChatConversations((prev) => prev)
     }
-  }, []) // Remove user dependency to prevent infinite loop
+  }, []) // Use ref to access latest user while keeping callback stable
 
   const refreshUser = useCallback(async () => {
     try {
@@ -96,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(userInfo)
         await loadChatConversations(userInfo)
       } else {
-        if (user) {
+        if (userRef.current) {
           console.warn('Failed to refresh user info; retaining existing session context.')
         } else {
           setUser(null)
@@ -105,14 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Failed to fetch user info:', error)
-      if (!user) {
+      if (!userRef.current) {
         setUser(null)
         setChatConversations([])
       }
     } finally {
       setIsLoading(false)
     }
-  }, [loadChatConversations, user])
+  }, [loadChatConversations])
 
   const login = () => {
     window.location.href = AuthClient.loginUrl()

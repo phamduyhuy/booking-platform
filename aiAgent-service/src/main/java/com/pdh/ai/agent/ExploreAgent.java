@@ -7,7 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.pdh.ai.agent.advisor.LoggingAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.mistralai.MistralAiChatModel;
+import org.springframework.ai.google.genai.GoogleGenAiChatModel;
+
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.stereotype.Component;
 
@@ -102,18 +103,18 @@ public class ExploreAgent {
             Remember: NEVER return a destination without using both geocode AND image search tools!
             """;
 
-    private final MistralAiChatModel openAiModel;
+    private final GoogleGenAiChatModel googleGenAiChatModel;
     private final ChatClient chatClient;
 
     public ExploreAgent(
             ToolCallbackProvider toolCallbackProvider,
-            MistralAiChatModel openAiModel
+            GoogleGenAiChatModel googleGenAiChatModel
     ) {
-        this.openAiModel = openAiModel;
+        this.googleGenAiChatModel = googleGenAiChatModel;
         
         LoggingAdvisor loggingAdvisor = new LoggingAdvisor();
         
-        this.chatClient = ChatClient.builder(openAiModel)
+        this.chatClient = ChatClient.builder(googleGenAiChatModel)
                 .defaultSystem(EXPLORE_SYSTEM_PROMPT)
                 .defaultToolCallbacks(toolCallbackProvider)
                 .defaultAdvisors(loggingAdvisor)

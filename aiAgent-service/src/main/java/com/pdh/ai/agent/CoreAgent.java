@@ -142,9 +142,7 @@ public class CoreAgent {
                 .defaultSystem(SYSTEM_PROMPT)
                 .build();
                
-
     }
-
 
     /**
      * Synchronous helper that consumes the streaming pipeline and returns the final payload.

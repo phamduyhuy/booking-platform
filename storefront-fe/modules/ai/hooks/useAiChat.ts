@@ -368,36 +368,85 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
                 console.error('Failed to refresh conversations:', err);
             });
         } catch (err: any) {
-            const fallbackTimestamp = new Date();
-            const errorMessage = err?.message || 'Không thể gửi tin nhắn. Vui lòng thử lại.';
-            setError(errorMessage);
-            onErrorRef.current?.(errorMessage);
+            try {
+                const fallbackResponse = await aiChatService.sendPromptRest(trimmedMessage, {
+                    conversationId: effectiveConversationId,
+                });
 
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const messageIndex = newMessages.findIndex(msg => msg.id === assistantMessageId);
+                const responseConversationId = fallbackResponse.conversationId ?? effectiveConversationId;
+                const fallbackTimestampIso = fallbackResponse.timestamp ?? new Date().toISOString();
+                const fallbackSuggestions = fallbackResponse.nextRequestSuggestions ?? fallbackResponse.next_request_suggestions ?? [];
 
-                if (messageIndex !== -1) {
-                    newMessages[messageIndex] = {
-                        ...newMessages[messageIndex],
-                        content: errorMessage,
-                        results: [],
-                        timestamp: fallbackTimestamp,
-                        suggestions: [],
-                        requiresConfirmation: false,
-                        confirmationContext: undefined,
-                    };
+                if (conversationIdRef.current !== responseConversationId) {
+                    setConversationId(responseConversationId);
                 }
 
-                return newMessages;
-            });
+                setError(null);
 
-            upsertChatConversation({
-                id: effectiveConversationId,
-                title: isExistingConversation ? '' : conversationTitle,
-                lastUpdated: fallbackTimestamp.toISOString(),
-                createdAt: isExistingConversation ? undefined : fallbackTimestamp.toISOString(),
-            });
+                setMessages(prev => {
+                    const next = [...prev];
+                    const idx = next.findIndex(msg => msg.id === assistantMessageId);
+                    if (idx === -1) {
+                        return next;
+                    }
+
+                    next[idx] = {
+                        ...next[idx],
+                        content: fallbackResponse.aiResponse ?? '',
+                        results: fallbackResponse.results ?? [],
+                        suggestions: fallbackSuggestions,
+                        requiresConfirmation: fallbackResponse.requiresConfirmation ?? false,
+                        confirmationContext: fallbackResponse.confirmationContext,
+                        timestamp: new Date(fallbackTimestampIso),
+                    };
+
+                    return next;
+                });
+
+                upsertChatConversation({
+                    id: responseConversationId,
+                    title: isExistingConversation ? '' : conversationTitle,
+                    lastUpdated: fallbackTimestampIso,
+                    createdAt: isExistingConversation ? undefined : fallbackTimestampIso,
+                });
+
+                refreshChatConversations().catch((refreshErr) => {
+                    console.error('Failed to refresh conversations:', refreshErr);
+                });
+
+                return;
+            } catch (fallbackErr: any) {
+                const fallbackTimestamp = new Date();
+                const errorMessage = fallbackErr?.message || err?.message || 'Không thể gửi tin nhắn. Vui lòng thử lại.';
+                setError(errorMessage);
+                onErrorRef.current?.(errorMessage);
+
+                setMessages(prev => {
+                    const newMessages = [...prev];
+                    const messageIndex = newMessages.findIndex(msg => msg.id === assistantMessageId);
+
+                    if (messageIndex !== -1) {
+                        newMessages[messageIndex] = {
+                            ...newMessages[messageIndex],
+                            content: errorMessage,
+                            results: [],
+                            timestamp: fallbackTimestamp,
+                            suggestions: [],
+                            requiresConfirmation: false,
+                            confirmationContext: undefined,
+                        };
+                    }
+
+                    return newMessages;
+                });
+
+                upsertChatConversation({
+                    id: effectiveConversationId,
+                    title: isExistingConversation ? '' : conversationTitle,
+                    lastUpdated: fallbackTimestamp.toISOString(),
+                    createdAt: isExistingConversation ? undefined : fallbackTimestamp.toISOString(),
+                });
+            }
         } finally {
             setIsLoading(false);
         }

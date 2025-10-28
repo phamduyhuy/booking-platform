@@ -35,7 +35,9 @@ public class JpaChatMemory implements ChatMemory {
     @Override
     @Transactional
     public void add(String conversationId, List<Message> messages) {
-        ChatMessage rootMessage = chatMessageRepository.findTopByConversationIdOrderByTimestampDesc(conversationId).orElse(null);
+        ChatMessage rootMessage = chatMessageRepository
+                .findFirstByConversationIdAndParentMessageIsNullOrderByTimestampAsc(conversationId)
+                .orElse(null);
 
         List<ChatMessage> entitiesToSave = new ArrayList<>();
         boolean newConversation = (rootMessage == null);
@@ -54,11 +56,12 @@ public class JpaChatMemory implements ChatMemory {
                     .build();
 
             if (newConversation) {
-                // This is a new conversation. The first message in the list is the root.
+                // First persisted message becomes the root (no parent, carries title).
                 chatMessage.setTitle(defaultTitle(message.getText()));
-                rootMessage = chatMessage; // Set for subsequent messages in this batch.
-                newConversation = false; // Only first message is root.
-            } else {
+                rootMessage = chatMessage;
+                newConversation = false;
+            } else if (rootMessage != null) {
+                // Persist descendants with a direct pointer to the root node.
                 chatMessage.setParentMessage(rootMessage);
             }
             entitiesToSave.add(chatMessage);
