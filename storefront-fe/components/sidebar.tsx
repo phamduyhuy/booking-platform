@@ -74,7 +74,7 @@ export function Sidebar() {
   return (
     <nav
       className={cn(
-        "shrink-0 border-r border-border bg-background flex h-full flex-col gap-3 py-4 w-[260px] min-w-[260px] px-4"
+        "shrink-0 border-r border-border bg-background flex h-full flex-col gap-3 py-3 w-[160px] min-w-[160px] px-3"
       )}
     >
       <div

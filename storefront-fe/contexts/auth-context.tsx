@@ -89,23 +89,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []) // Remove user dependency to prevent infinite loop
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const userInfo = await AuthClient.getUserInfo()
-      setUser(userInfo)
       if (userInfo) {
+        setUser(userInfo)
         await loadChatConversations(userInfo)
       } else {
-        setChatConversations([])
+        if (user) {
+          console.warn('Failed to refresh user info; retaining existing session context.')
+        } else {
+          setUser(null)
+          setChatConversations([])
+        }
       }
     } catch (error) {
       console.error('Failed to fetch user info:', error)
-      setUser(null)
-      setChatConversations([])
+      if (!user) {
+        setUser(null)
+        setChatConversations([])
+      }
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [loadChatConversations, user])
 
   const login = () => {
     window.location.href = AuthClient.loginUrl()
@@ -124,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshUser()
-  }, [])
+  }, [refreshUser])
 
   const upsertChatConversation = useCallback((conversation: Pick<ChatConversationSummary, "id" | "title"> & Partial<ChatConversationSummary>) => {
     setChatConversations(prev => {

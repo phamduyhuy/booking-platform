@@ -3,9 +3,6 @@ package com.pdh.ai.agent;
 import java.util.List;
 import java.util.Map;
 import com.pdh.ai.agent.tools.CurrentDateTimeZoneTool;
-import com.pdh.ai.client.CustomerClientService;
-
-import com.pdh.common.utils.AuthenticationUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,9 +11,7 @@ import com.pdh.ai.agent.guard.InputValidationGuard;
 import com.pdh.ai.agent.guard.ScopeGuard;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
-import org.springframework.ai.mistralai.MistralAiChatModel;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -124,43 +119,27 @@ public class CoreAgent {
             """;
     private final ChatMemory chatMemory;
     private final ChatClient chatClient;
-    private final CustomerClientService customerClientService;
     private final CurrentDateTimeZoneTool currentDateTimeZoneTool = new CurrentDateTimeZoneTool();
-    private static final String NDJSON_INSTRUCTION_TEMPLATE = """
-            ## ALWAYS return each response as newline-delimited JSON (NDJSON).
-            Emit one complete JSON object per line that fully conforms to the JSON schema below.
-            Do NOT include markdown code fences, triple backticks, explanations, or any text outside of the JSON objects.
-            End every JSON object with a newline character.
-            **JSON Schema:
-            %s
-            """;
-
-    private final BeanOutputConverter<StructuredChatPayload> beanOutputConverter = new BeanOutputConverter<>(StructuredChatPayload.class);
     public CoreAgent(
             ToolCallbackProvider toolCallbackProvider,
             JpaChatMemory chatMemory,
             InputValidationGuard inputValidationGuard,
             ScopeGuard scopeGuard,
-            MistralAiChatModel mistraModel,
-            GoogleGenAiChatModel googleGenAiChatModel,
-            CustomerClientService customerClientService
+            GoogleGenAiChatModel googleGenAiChatModel
     ) {
 
         this.chatMemory = chatMemory;
-        this.customerClientService = customerClientService;
+
 
         // Advisors
         CustomMessageChatMemoryAdvisor memoryAdvisor = CustomMessageChatMemoryAdvisor.builder(chatMemory)
-                
+  
                 .build();
-        String ndjsonInstruction = NDJSON_INSTRUCTION_TEMPLATE.formatted(beanOutputConverter.getJsonSchema());
-        String composedSystemPrompt = SYSTEM_PROMPT + "\n\n" + ndjsonInstruction;
-
         this.chatClient = ChatClient.builder(googleGenAiChatModel)
                 .defaultToolCallbacks(toolCallbackProvider)
                 .defaultAdvisors(memoryAdvisor)
                 .defaultTools(currentDateTimeZoneTool)
-                .defaultSystem(systemSpec -> systemSpec.text(composedSystemPrompt))
+                .defaultSystem(SYSTEM_PROMPT)
                 .build();
                
 
@@ -170,114 +149,50 @@ public class CoreAgent {
     /**
      * Synchronous helper that consumes the streaming pipeline and returns the final payload.
      */
-    public Mono<StructuredChatPayload> processStructured(String message, String conversationId) {
-        logger.info("[SYNC-TOOL-TRACKER] Starting processStructured - conversationId: {}", conversationId);
-        return streamStructured(message, conversationId)
-                .last(StructuredChatPayload.builder()
-                        .message("Đã xử lý yêu cầu nhưng không có kết quả.")
-                        .results(List.of())
-                        .build())
-                .onErrorResume(e -> {
-                    logger.error("[SYNC-TOOL-TRACKER] Error in processStructured stream: {}", e.getMessage(), e);
-                    return Mono.just(StructuredChatPayload.builder()
-                            .message(ERROR_MESSAGE)
-                            .results(List.of())
-                            .build());
-                });
-    }
+        public Mono<StructuredChatPayload> processSyncStructured(String message, String conversationId) {
+        logger.info("[SYNC-TOOL-TRACKER] Starting processSyncStructured - conversationId: {}", conversationId);
+        logger.info("[SYNC-TOOL-TRACKER] User message: {}", message);
 
-    /**
-     * Streaming structured processing - emits NDJSON compliant payloads as soon as the LLM produces them.
-     */
-    public Flux<StructuredChatPayload> streamStructured(String message, String conversationId) {
-        logger.info("[STREAM-TOOL-TRACKER] Starting streamStructured - conversationId: {}", conversationId);
-        Map<String, Object> customerProfile = customerClientService.getCustomer();
-        return chatClient.prompt()
+        return Mono.fromCallable(() -> {
+
+            // Use .entity() for direct structured output instead of streaming
+            
+            StructuredChatPayload result = chatClient.prompt()
                 .user(u ->u.text(message)
                         .metadata(Map.of(
-                                "userId", AuthenticationUtils.extractUserId(),
-                                "conversationId", conversationId,
-                                "currentUserTimeZone", currentDateTimeZoneTool.getCurrentDateTimeZone(),
-                                "customerProfile", customerProfile
+                                "currentUserTimeZone", currentDateTimeZoneTool.getCurrentDateTimeZone()
                         ))
                 )
-                .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
-                .stream()
-                .content()
-                .transform(this::splitOnNewline)
-                .handle((jsonLine, sink) -> {
-                    StructuredChatPayload payload = convertLineToPayload(jsonLine);
-                    if (payload != null) {
-                        sink.next(payload);
-                    }
-                });
-    }
+                    .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, conversationId))
+                    .call()
+                    .entity(StructuredChatPayload.class);
 
-    private Flux<String> splitOnNewline(Flux<String> tokenFlux) {
-        return Flux.create(sink -> {
-            StringBuilder buffer = new StringBuilder();
-            reactor.core.Disposable disposable = tokenFlux.subscribe(
-                    token -> {
-                        buffer.append(token);
-                        int index;
-                        while ((index = buffer.indexOf("\n")) >= 0) {
-                            String line = buffer.substring(0, index).trim();
-                            if (!line.isBlank()) {
-                                sink.next(line);
-                            }
-                            buffer.delete(0, index + 1);
-                        }
-                    },
-                    sink::error,
-                    () -> {
-                        if (buffer.length() > 0) {
-                            String remaining = buffer.toString().trim();
-                            if (!remaining.isBlank()) {
-                                sink.next(remaining);
-                            }
-                        }
-                        sink.complete();
-                    }
-            );
-            sink.onCancel(disposable);
-            sink.onDispose(disposable);
+            logger.info("[SYNC-TOOL-TRACKER] Successfully got structured response: message={}, results={}",
+                    result != null ? result.getMessage() : "null",
+                    result != null && result.getResults() != null ? result.getResults().toString() : 0);
+
+            return result != null ? result : StructuredChatPayload.builder()
+                    .message("Đã xử lý yêu cầu nhưng không có kết quả.")
+                    .results(List.of())
+                    .build();
+
+        }).onErrorResume(e -> {
+        
+            logger.error("[SYNC-TOOL-TRACKER] Error in processSyncStructured: {}", e.getMessage(), e);
+            return Mono.just(StructuredChatPayload.builder()
+                    .message(ERROR_MESSAGE)
+                    .results(List.of())
+                    .build());
         });
     }
-
-    private StructuredChatPayload convertLineToPayload(String jsonLine) {
-        try {
-            String sanitized = sanitizeNdjson(jsonLine);
-            if (sanitized.isBlank()) {
-                return null;
-            }
-            StructuredChatPayload payload = beanOutputConverter.convert(sanitized);
-            if (payload.getResults() == null) {
-                payload.setResults(List.of());
-            }
-            return payload;
-        } catch (Exception ex) {
-            logger.warn("[STREAM-TOOL-TRACKER] Failed to parse NDJSON chunk: {}", ex.getMessage());
-            return null;
-        }
+    public Mono<StructuredChatPayload> processStructured(String message, String conversationId) {
+        return processSyncStructured(message, conversationId);
     }
 
-    private String sanitizeNdjson(String raw) {
-        if (raw == null) {
-            return "";
-        }
-        String sanitized = raw.trim();
-        // Strip common markdown code fences if they slip through
-        if (sanitized.startsWith("```")) {
-            sanitized = sanitized.substring(3).trim();
-        }
-        if (sanitized.endsWith("```")) {
-            sanitized = sanitized.substring(0, sanitized.length() - 3).trim();
-        }
-        // Remove leading backticks that sometimes prefix NDJSON chunks
-        while (sanitized.startsWith("`")) {
-            sanitized = sanitized.substring(1).trim();
-        }
-        return sanitized;
+    public Flux<StructuredChatPayload> streamStructured(String message, String conversationId) {
+        logger.info("[SYNC-TOOL-TRACKER] streamStructured fallback invoked - conversationId: {}", conversationId);
+        return processSyncStructured(message, conversationId)
+                .flatMapMany(payload -> payload != null ? Flux.just(payload) : Flux.empty());
     }
 
 }

@@ -36,7 +36,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import reactor.core.scheduler.Schedulers;
 
@@ -125,46 +124,20 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .conversationId(conversationId)
                 .message(socketRequest.getMessage())
                 .timestamp(socketRequest.getTimestamp())
-                .mode("stream")
+                .mode("sync")
                 .build();
 
-        AtomicReference<StructuredChatPayload> lastPayload = new AtomicReference<>();
-
-        llmAiService.streamStructured(
-                        chatRequest.getMessage(),
-                        chatRequest.getConversationId(),
-                        userId
+        reactor.core.publisher.Mono.fromCallable(() ->
+                        llmAiService.processStructured(
+                                chatRequest.getMessage(),
+                                chatRequest.getConversationId(),
+                                userId
+                        )
                 )
-                .publishOn(workerScheduler)
+                .subscribeOn(workerScheduler)
                 .subscribe(
                         payload -> {
-                            lastPayload.set(payload);
-                            ChatMessageResponse chunk = ChatMessageResponse.builder()
-                                    .type(ResponseType.PROCESSING)
-                                    .requestId(requestId)
-                                    .conversationId(conversationId)
-                                    .userId(userId)
-                                    .userMessage(socketRequest.getMessage())
-                                    .aiResponse(payload.getMessage())
-                                    .results(payload.getResults())
-                                    .nextRequestSuggestions(extractSuggestions(payload))
-                                    .requiresConfirmation(Boolean.TRUE.equals(payload.getRequiresConfirmation()))
-                                    .confirmationContext(payload.getConfirmationContext())
-                                    .status("Streaming")
-                                    .timestamp(LocalDateTime.now())
-                                    .build();
-                            safeSend(session, chunk);
-                        },
-                        throwable -> {
-                            log.error("❌ [AI-WS] Error streaming message. requestId={}, conversationId={}, user={}",
-                                    requestId, conversationId, userId, throwable);
-                            safeSend(session, buildErrorResponse(requestId,
-                                    "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
-                                    conversationId,
-                                    userId));
-                        },
-                        () -> {
-                            StructuredChatPayload safePayload = lastPayload.get();
+                            StructuredChatPayload safePayload = payload;
                             if (safePayload == null) {
                                 safePayload = StructuredChatPayload.builder()
                                         .message("Xin lỗi, tôi không thể tạo phản hồi lúc này.")
@@ -189,6 +162,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                                     .build();
 
                             safeSend(session, response);
+                        },
+                        throwable -> {
+                            log.error("❌ [AI-WS] Error processing message. requestId={}, conversationId={}, user={}",
+                                    requestId, conversationId, userId, throwable);
+                            safeSend(session, buildErrorResponse(requestId,
+                                    "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
+                                    conversationId,
+                                    userId));
                         }
                 );
     }
@@ -255,12 +236,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (attributes != null) {
             Object usernameAttr = attributes.get("username");
             if (usernameAttr instanceof String username && StringUtils.hasText(username)) {
+                System.out.println("Found username in attributes: " + username);
                 return Optional.of(username);
             }
             Object jwtAttr = attributes.get("jwt");
             if (jwtAttr instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
                 String preferredUsername = jwt.getClaimAsString("preferred_username");
                 if (StringUtils.hasText(preferredUsername)) {
+                    System.out.println("Found preferred_username in JWT: " + preferredUsername);
                     return Optional.of(preferredUsername);
                 }
             }

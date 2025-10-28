@@ -254,10 +254,13 @@ export const ChatInterface = forwardRef<any, ChatInterfaceProps>(function ChatIn
                     <AiResponseRenderer
                       message={message.content}
                       results={message.results || []}
+                      requiresConfirmation={message.requiresConfirmation}
+                      confirmationContext={message.confirmationContext}
                       onFlightBook={onFlightBook}
                       onHotelBook={onHotelBook}
                       onLocationClick={onLocationClick}
                       canBook={true}
+                      isLoading={isCurrentlyStreaming}
                     />
 
                     {formattedTimestamp && (!isCurrentlyStreaming || message.content) && (

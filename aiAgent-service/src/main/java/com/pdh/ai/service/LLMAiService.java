@@ -20,8 +20,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 @Slf4j
@@ -41,82 +39,51 @@ public class LLMAiService implements AiService {
 
     @Override
     public StructuredChatPayload processStructured(String message, String conversationId, String userId) {
-        StructuredChatPayload defaultPayload = StructuredChatPayload.builder()
-                .message("Đã xử lý yêu cầu nhưng không có kết quả.")
-                .results(Collections.emptyList())
+        String actualUserId = resolveAuthenticatedUserId(userId);
+        String conversationKey = formatConversationKey(actualUserId, conversationId);
+        Instant now = Instant.now();
+
+        ChatMessage parent = chatMessageRepository
+                .findTopByConversationIdOrderByTimestampDesc(conversationKey)
+                .orElse(null);
+
+        ChatMessage userMessage = ChatMessage.builder()
+                .conversationId(conversationKey)
+                .role(MessageType.USER)
+                .content(message)
+                .timestamp(now)
                 .build();
 
-        return streamStructured(message, conversationId, userId)
-                .last(defaultPayload)
+        ChatMessage savedUserMessage;
+        if (parent == null) {
+            userMessage.setTitle(defaultTitle(message));
+            savedUserMessage = chatMessageRepository.save(userMessage);
+        } else {
+            userMessage.setParentMessage(parent);
+            savedUserMessage = chatMessageRepository.save(userMessage);
+        }
+
+        final ChatMessage conversationRoot = resolveConversationRoot(parent, savedUserMessage);
+
+        StructuredChatPayload payload = coreAgent.processSyncStructured(message, conversationKey)
+                .map(this::ensureValidPayload)
+                .doOnError(error -> log.error("[CHAT-MESSAGE] Error processing structured response", error))
                 .onErrorReturn(buildErrorResponse())
                 .block();
+
+        if (payload == null) {
+            payload = buildErrorResponse();
+        }
+
+        persistAssistantMessage(conversationKey, conversationRoot, payload);
+        return payload;
     }
 
     @Override
     public Flux<StructuredChatPayload> streamStructured(String message, String conversationId, String userId) {
         return Flux.defer(() -> {
-            String actualUserId = resolveAuthenticatedUserId(userId);
-            String conversationKey = formatConversationKey(actualUserId, conversationId);
-            Instant now = Instant.now();
-
-            ChatMessage parent = chatMessageRepository
-                    .findTopByConversationIdOrderByTimestampDesc(conversationKey)
-                    .orElse(null);
-
-            ChatMessage userMessage = ChatMessage.builder()
-                    .conversationId(conversationKey)
-                    .role(MessageType.USER)
-                    .content(message)
-                    .timestamp(now)
-                    .build();
-
-            ChatMessage savedUserMessage;
-            if (parent == null) {
-                userMessage.setTitle(defaultTitle(message));
-                savedUserMessage = chatMessageRepository.save(userMessage);
-            } else {
-                userMessage.setParentMessage(parent);
-                savedUserMessage = chatMessageRepository.save(userMessage);
-            }
-
-            final ChatMessage conversationRoot = (parent == null) ? savedUserMessage : parent;
-
-            AtomicReference<StructuredChatPayload> lastPayload = new AtomicReference<>();
-            AtomicBoolean assistantPersisted = new AtomicBoolean(false);
-
-            return coreAgent.streamStructured(message, conversationKey)
-                    .map(this::ensureValidPayload)
-                    .doOnNext(lastPayload::set)
-                    .doOnError(error -> {
-                        log.error("[CHAT-MESSAGE] Error streaming response", error);
-                        StructuredChatPayload errorPayload = buildErrorResponse();
-                        persistAssistantMessage(conversationKey, conversationRoot, errorPayload);
-                        assistantPersisted.set(true);
-                    })
-                    .doOnComplete(() -> {
-                        StructuredChatPayload finalPayload = lastPayload.get();
-                        if (finalPayload == null) {
-                            finalPayload = StructuredChatPayload.builder()
-                                    .message("Đã xử lý yêu cầu nhưng không có kết quả.")
-                                    .results(Collections.emptyList())
-                                    .build();
-                        }
-                        persistAssistantMessage(conversationKey, conversationRoot, finalPayload);
-                        assistantPersisted.set(true);
-                    })
-                    .doFinally(signalType -> {
-                        if (!assistantPersisted.get()) {
-                            StructuredChatPayload fallbackPayload = lastPayload.get();
-                            if (fallbackPayload == null) {
-                                fallbackPayload = StructuredChatPayload.builder()
-                                        .message("Cuộc trò chuyện đã kết thúc trước khi có phản hồi.")
-                                        .results(Collections.emptyList())
-                                        .build();
-                            }
-                            persistAssistantMessage(conversationKey, conversationRoot, fallbackPayload);
-                            assistantPersisted.set(true);
-                        }
-                    });
+            StructuredChatPayload payload = processStructured(message, conversationId, userId);
+            return payload != null ? Flux.just(payload) : Flux.empty();
         });
     }
 
@@ -257,6 +224,19 @@ public class LLMAiService implements AiService {
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize assistant response for persistence", e);
         }
+    }
+
+    private ChatMessage resolveConversationRoot(ChatMessage parent, ChatMessage fallback) {
+        if (parent == null) {
+            return fallback;
+        }
+
+        ChatMessage current = parent;
+        while (current.getParentMessage() != null) {
+            current = current.getParentMessage();
+        }
+
+        return current != null ? current : fallback;
     }
 
     /**

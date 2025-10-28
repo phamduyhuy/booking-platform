@@ -162,9 +162,8 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
     const [error, setError] = useState<string | null>(null);
     const [conversationId, setConversationId] = useState<string | null>(initialConversationId || null);
     const [suggestions, setSuggestions] = useState<string[]>([]);
-    const { user, refreshChatConversations, upsertChatConversation } = useAuth();
-    const currentAssistantMessageIdRef = useRef<string | null>(null);
-    const conversationIdRef = useRef(conversationId);
+    const { refreshChatConversations, upsertChatConversation } = useAuth();
+    const conversationIdRef = useRef<string | null>(conversationId);
     const onErrorRef = useRef(onError);
 
     useEffect(() => {
@@ -230,12 +229,13 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
         const conversationTitle = buildConversationTitle(trimmedMessage);
         const userMessageId = createMessageId('user');
         const assistantMessageId = createMessageId('assistant');
+        const now = new Date();
 
         const userMessage: ChatMessage = {
             id: userMessageId,
             content: trimmedMessage,
             isUser: true,
-            timestamp: new Date(),
+            timestamp: now,
             results: [],
             suggestions: [],
         };
@@ -244,7 +244,7 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
             id: assistantMessageId,
             content: '',
             isUser: false,
-            timestamp: new Date(),
+            timestamp: now,
             results: [],
             suggestions: [],
         };
@@ -259,12 +259,49 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
             upsertChatConversation({
                 id: effectiveConversationId,
                 title: conversationTitle,
-                createdAt: new Date().toISOString(),
-                lastUpdated: new Date().toISOString(),
+                createdAt: now.toISOString(),
+                lastUpdated: now.toISOString(),
             });
         }
 
-        currentAssistantMessageIdRef.current = assistantMessageId;
+        const updateAssistantMessage = (event: ChatMessageResponse) => {
+            setMessages(prev => {
+                const next = [...prev];
+                const idx = next.findIndex(msg => msg.id === assistantMessageId);
+                if (idx === -1) {
+                    return next;
+                }
+
+                const existing = next[idx];
+                const safeTimestamp = event.timestamp ? new Date(event.timestamp) : existing.timestamp;
+                const suggestionsField = event.nextRequestSuggestions ?? event.next_request_suggestions;
+                const nextSuggestions = suggestionsField !== undefined
+                    ? [...suggestionsField]
+                    : existing.suggestions ?? [];
+                const hasResults = Array.isArray(event.results) && event.results.length > 0;
+
+                const updatedContent =
+                    event.aiResponse && event.aiResponse.trim().length > 0
+                        ? event.aiResponse
+                        : existing.content;
+
+                const updatedResults = hasResults
+                    ? [...(event.results as ChatStructuredResult[])]
+                    : existing.results ?? [];
+
+                next[idx] = {
+                    ...existing,
+                    content: updatedContent,
+                    results: updatedResults,
+                    suggestions: nextSuggestions,
+                    requiresConfirmation: event.requiresConfirmation ?? existing.requiresConfirmation,
+                    confirmationContext: event.confirmationContext ?? existing.confirmationContext,
+                    timestamp: safeTimestamp,
+                };
+
+                return next;
+            });
+        };
 
         try {
             const finalResponse = await aiChatService.streamPrompt(trimmedMessage, {
@@ -278,57 +315,31 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
                         setConversationId(event.conversationId);
                     }
 
-                    setMessages(prev => {
-                        const next = [...prev];
-                        const idx = next.findIndex(msg => msg.id === assistantMessageId);
-                        if (idx === -1) {
-                            return next;
-                        }
-
-                        const existing = next[idx];
-                        const isProcessing = event.type === 'PROCESSING';
-                        const suggestionsField = event.nextRequestSuggestions ?? event.next_request_suggestions;
-                        const nextSuggestions = suggestionsField !== undefined
-                            ? [...suggestionsField]
-                            : existing.suggestions ?? [];
-
-                        const updatedContent = (() => {
-                            if (!event.aiResponse || !event.aiResponse.trim()) {
-                                return isProcessing ? existing.content : existing.content;
-                            }
-                            return event.aiResponse;
-                        })();
-
-                        next[idx] = {
-                            ...existing,
-                            content: updatedContent,
-                            results: event.results ?? existing.results ?? [],
-                            suggestions: nextSuggestions,
-                            requiresConfirmation: event.requiresConfirmation ?? existing.requiresConfirmation,
-                            confirmationContext: event.confirmationContext ?? existing.confirmationContext,
-                            timestamp: new Date(event.timestamp),
-                        };
-                        return next;
-                    });
+                    updateAssistantMessage(event);
 
                     if (event.conversationId) {
+                        const timestampIso = event.timestamp ?? new Date().toISOString();
                         upsertChatConversation({
                             id: event.conversationId,
                             title: isExistingConversation ? '' : conversationTitle,
-                            lastUpdated: event.timestamp ?? new Date().toISOString(),
+                            lastUpdated: timestampIso,
+                            createdAt: isExistingConversation ? undefined : timestampIso,
                         });
                     }
-                }
+                },
             });
 
-            if (finalResponse.conversationId && finalResponse.conversationId !== conversationId) {
-                setConversationId(finalResponse.conversationId);
+            const responseConversationId = finalResponse.conversationId ?? effectiveConversationId;
+
+            if (conversationId !== responseConversationId) {
+                setConversationId(responseConversationId);
             }
 
             const lastUpdatedIso = finalResponse.timestamp ?? new Date().toISOString();
+            const suggestionsField = finalResponse.nextRequestSuggestions ?? finalResponse.next_request_suggestions ?? [];
 
             upsertChatConversation({
-                id: finalResponse.conversationId,
+                id: responseConversationId,
                 title: isExistingConversation ? '' : conversationTitle,
                 lastUpdated: lastUpdatedIso,
                 createdAt: isExistingConversation ? undefined : lastUpdatedIso,
@@ -340,33 +351,27 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
                 if (idx === -1) {
                     return next;
                 }
-                const suggestionsField = finalResponse.nextRequestSuggestions ?? finalResponse.next_request_suggestions;
-                const nextSuggestions = suggestionsField !== undefined
-                    ? [...suggestionsField]
-                    : next[idx].suggestions ?? [];
+
                 next[idx] = {
                     ...next[idx],
-                    content: finalResponse.aiResponse ?? next[idx].content,
+                    content: finalResponse.aiResponse ?? '',
                     results: finalResponse.results ?? [],
-                    suggestions: nextSuggestions,
+                    suggestions: suggestionsField,
                     requiresConfirmation: finalResponse.requiresConfirmation ?? false,
                     confirmationContext: finalResponse.confirmationContext,
-                    timestamp: new Date(finalResponse.timestamp),
+                    timestamp: new Date(lastUpdatedIso),
                 };
                 return next;
             });
 
-            // Always refresh conversations after AI response to update sidebar
             refreshChatConversations().catch((err) => {
                 console.error('Failed to refresh conversations:', err);
             });
-
-            currentAssistantMessageIdRef.current = null;
-
         } catch (err: any) {
+            const fallbackTimestamp = new Date();
             const errorMessage = err?.message || 'Không thể gửi tin nhắn. Vui lòng thử lại.';
             setError(errorMessage);
-            onError?.(errorMessage);
+            onErrorRef.current?.(errorMessage);
 
             setMessages(prev => {
                 const newMessages = [...prev];
@@ -377,16 +382,22 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
                         ...newMessages[messageIndex],
                         content: errorMessage,
                         results: [],
-                        timestamp: new Date(),
+                        timestamp: fallbackTimestamp,
                         suggestions: [],
+                        requiresConfirmation: false,
+                        confirmationContext: undefined,
                     };
                 }
 
                 return newMessages;
             });
 
-            currentAssistantMessageIdRef.current = null;
-
+            upsertChatConversation({
+                id: effectiveConversationId,
+                title: isExistingConversation ? '' : conversationTitle,
+                lastUpdated: fallbackTimestamp.toISOString(),
+                createdAt: isExistingConversation ? undefined : fallbackTimestamp.toISOString(),
+            });
         } finally {
             setIsLoading(false);
         }

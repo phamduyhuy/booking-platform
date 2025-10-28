@@ -77,6 +77,7 @@ interface AiResponseRendererProps {
   onConfirm?: (context: ConfirmationContext) => void
   onCancel?: () => void
   canBook?: boolean
+  isLoading?: boolean
 }
 
 // Memoized sub-components for better performance
@@ -372,7 +373,6 @@ const InfoResultsSection = memo(({
           }
           
           const isClickable = hasCoordinates && Boolean(onLocationClick)
-          console.log('Rendering Info Card:', { title: result.title, hasCoordinates, isClickable })
           return (
             <div 
               key={`info-${index}`}
@@ -522,6 +522,7 @@ export function AiResponseRenderer({
   onConfirm,
   onCancel,
   canBook = true,
+  isLoading = false,
 }: AiResponseRendererProps) {
   // State for flight details modal
   const [selectedFlightForModal, setSelectedFlightForModal] = useState<FlightDataForCard | null>(null);
@@ -567,13 +568,21 @@ export function AiResponseRenderer({
   }, [onHotelBook])
 
   const hasAnyResults = flightResults.length > 0 || hotelResults.length > 0 || infoResults.length > 0;
+  const showSkeleton = isLoading && (!message || message.trim().length === 0);
 
 
   return (
     <div className="space-y-4">
       {/* AI Message Text */}
       <div className="prose prose-sm max-w-none">
-        {message.trim() && <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">{message}</div>}
+        {showSkeleton ? (
+          <div className="space-y-3" aria-live="polite">
+            <span className="sr-only">AI đang xử lý yêu cầu của bạn</span>
+            <ResultsSkeleton count={2} />
+          </div>
+        ) : (
+          message.trim() && <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">{message}</div>
+        )}
       </div>
 
       {/* Results */}
@@ -609,11 +618,6 @@ export function AiResponseRenderer({
               />
           )}
         </>
-      )}
-
-      {/* Skeletons: Show if no results are available yet and message is empty (e.g., during initial loading) */}
-      {!hasAnyResults && !message && (
-          <ResultsSkeleton count={2} />
       )}
 
       {/* Confirmation UI */}

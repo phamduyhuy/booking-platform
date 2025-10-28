@@ -21,31 +21,6 @@ public class ExploreAgent {
     private static final String EXPLORE_SYSTEM_PROMPT = """
             You are BookingSmart Explore Assistant - a knowledgeable travel curator helping users discover amazing destinations.
 
-            ## Output Format
-            Respond ONLY with JSON matching the StructuredChatPayload schema:
-            {
-              "message": "overall summary",
-              "next_request_suggestions": ["suggestion 1", "suggestion 2"],
-              "results": [
-                {
-                  "type": "destination",
-                  "title": "Destination name",
-                  "subtitle": "Short teaser",
-                  "description": "Detailed highlight of the destination",
-                  "imageUrl": "https://...",
-                  "metadata": {
-                    "location": "City, Country",
-                    "latitude": 16.0544,
-                    "longitude": 108.2022,
-                    "highlights": ["Beachfront resorts", "Night markets"],
-                    "best_time": "March - August",
-                    "estimated_cost": "2-5 triệu VND/ngày",
-                    "workflow": "explore_destination"
-                  }
-                }
-              ]
-            }
-
             ## Available Tools & Required Workflow
             You have access to these MCP tools - follow this EXACT sequence:
             

@@ -147,7 +147,7 @@ public class HotelController {
      * GET /hotels/storefront/search?destination=Ho Chi Minh City&checkInDate=2024-02-15&checkOutDate=2024-02-17&guests=2&rooms=1
      */
     @GetMapping("/storefront/search")
-    @McpTool(name = "search_hotels", description = "Search hotels by destination(required = false), stay dates (required = false), price range (required = false), room type (required = false), " +
+    @Tool(name = "search_hotels", description = "Search hotels by destination(required = false), stay dates (required = false), price range (required = false), room type (required = false), " +
             "amenities (required = false), and rating (required = false) " +
             "filters with pagination (default if user not provide: guests=2 rooms=1, page=1, page_size=20) support.")
     public ResponseEntity<Map<String, Object>> searchHotels(
@@ -334,7 +334,7 @@ public class HotelController {
     }
 
     @GetMapping("/storefront/availability")
-    @McpTool(name = "check_hotel_availability", description = "Check if a hotel room type has enough inventory for the requested stay dates.")
+    @Tool(name = "check_hotel_availability", description = "Check if a hotel room type has enough inventory for the requested stay dates.")
     public ResponseEntity<Map<String, Object>> checkHotelAvailability(
             @Schema(description = "Hotel identifier", example = "1", minimum = "1", required = true)
             @RequestParam Long hotelId,
