@@ -170,7 +170,7 @@ export function Sidebar() {
         )}
       </div>
 
-      <div className={cn("flex flex-col gap-2 items-stretch")}> 
+      <div className={cn("flex flex-col gap-2 items-stretch mx-auto")}> 
         {isLoading ? (
           <div className="h-10 w-10 animate-pulse rounded-full bg-secondary" />
         ) : isAuthenticated && user ? (

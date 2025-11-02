@@ -30,7 +30,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springaicommunity.mcp.annotation.McpTool;
+import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -88,41 +90,41 @@ public class FlightController {
 
     @GetMapping("/storefront/search")
 
-    @Tool(name = "search_flights", description = "Search flights with filters for origin, destination, dates, airline, price range, and duration.")
+    @McpTool(name = "search_flights", description = "Search flights with filters for origin, destination, dates, airline, seat class, price range, and duration.")
     public ResponseEntity<Map<String, Object>> searchFlights(
-            @Schema(description = "Origin airport, city, or IATA code", example = "HAN")
+            @McpToolParam(description = "Origin airport, city, or IATA code", required = false)
             @RequestParam(required = false) String origin,
-            @Schema(description = "Destination airport, city, or IATA code", example = "SGN")
+            @McpToolParam(description = "Destination airport, city, or IATA code", required = false)
             @RequestParam(required = false) String destination,
-            @Schema(description = "Airline name filter", example = "Vietnam Airlines")
+            @McpToolParam(description = "Airline name filter", required = false)
             @RequestParam(required = false) String airlineName,
-            @Schema(description = "Airline IATA code filter", example = "VN")
+            @McpToolParam(description = "Airline IATA code filter", required = false)
             @RequestParam(required = false) String airlineCode,
-            @Schema(description = "Departure date in YYYY-MM-DD format", example = "2024-12-25", pattern = "^\\d{4}-\\d{2}-\\d{2}$")
+            @McpToolParam(description = "Departure date in YYYY-MM-DD format", required = false)
             @RequestParam(required = false) String departureDate,
-            @Schema(description = "Return date in YYYY-MM-DD format (for round-trip)", example = "2024-12-30", pattern = "^\\d{4}-\\d{2}-\\d{2}$")
+            @McpToolParam(description = "Return date in YYYY-MM-DD format (for round-trip)",  required = false)
             @RequestParam(required = false) String returnDate,
-            @Schema(description = "Number of passengers", example = "1", minimum = "1", maximum = "9", defaultValue = "1")
+            @McpToolParam(description = "Number of passengers")
             @RequestParam(defaultValue = "1") Integer passengers,
-            @Schema(description = "Seat class", example = "ECONOMY", allowableValues = {"ECONOMY", "BUSINESS", "FIRST"}, defaultValue = "ECONOMY")
+            @McpToolParam(description = "Seat class")
             @RequestParam(defaultValue = "ECONOMY") String seatClass,
-            @Schema(description = "Minimum total fare in VND", example = "1000000", minimum = "0")
+            @McpToolParam(description = "Minimum total fare")
             @RequestParam(required = false) BigDecimal minPrice,
-            @Schema(description = "Maximum total fare in VND", example = "5000000", minimum = "0")
+            @McpToolParam(description = "Maximum total fare")
             @RequestParam(required = false) BigDecimal maxPrice,
-            @Schema(description = "Minimum duration in minutes", example = "60", minimum = "0")
+            @McpToolParam(description = "Minimum duration in minutes")
             @RequestParam(required = false) Integer minDuration,
-            @Schema(description = "Maximum duration in minutes", example = "480", minimum = "0")
+            @McpToolParam(description = "Maximum duration in minutes")
             @RequestParam(required = false) Integer maxDuration,
-            @Schema(description = "Sort by criteria", example = "departure", allowableValues = {"price", "duration", "departure", "arrival"}, defaultValue = "departure")
+            @McpToolParam(description = "Sort by criteria (price, duration, departure, arrival")
             @RequestParam(defaultValue = "departure") String sortBy,
-            @Schema(description = "Filter by airline ID", example = "1", minimum = "1")
+            @McpToolParam(description = "Filter by airline ID")
             @RequestParam(required = false) Long airlineId,
-            @Schema(description = "Filter by departure airport ID", example = "1", minimum = "1")
+            @McpToolParam(description = "Filter by departure airport ID")
             @RequestParam(required = false) Long departureAirportId,
-            @Schema(description = "Page number (1-based)", example = "1", minimum = "1", defaultValue = "1")
+            @McpToolParam(description = "Page number (1-based)")
             @RequestParam(defaultValue = "1") Integer page,
-            @Schema(description = "Number of results per page", example = "20", minimum = "1", maximum = "100", defaultValue = "20")
+            @McpToolParam(description = "Number of results per page")
             @RequestParam(defaultValue = "20") Integer limit) {
 
         log.info("Flight search request: origin={}, destination={}, departureDate={}, airlineName={}, minPrice={}, maxPrice={}, seatClass={}",
@@ -137,28 +139,34 @@ public class FlightController {
             SearchValidation.ValidationResult airlineValidation = SearchValidation.validateSearchQuery(airlineName);
 
             if (!originValidation.isValid()) {
+                log.debug("Origin validation failed: {}", originValidation.getErrorMessage());
                 return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError(originValidation.getErrorMessage(), effectivePage, effectiveLimit));
             }
 
             if (!destinationValidation.isValid()) {
+                log.debug("Destination validation failed: {}", destinationValidation.getErrorMessage());
                 return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError(destinationValidation.getErrorMessage(), effectivePage, effectiveLimit));
             }
 
             if (!airlineValidation.isValid()) {
+                log.debug("Airline name validation failed: {}", airlineValidation.getErrorMessage());
                 return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError(airlineValidation.getErrorMessage(), effectivePage, effectiveLimit));
             }
 
             if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
+                log.debug("Price range validation failed: minPrice {} > maxPrice {}", minPrice, maxPrice);
                 return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError("minPrice cannot be greater than maxPrice", effectivePage, effectiveLimit));
             }
 
             if (minDuration != null && maxDuration != null && minDuration > maxDuration) {
+                log.debug("Duration range validation failed: minDuration {} > maxDuration {}", minDuration, maxDuration);
                 return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError("minDuration cannot be greater than maxDuration", effectivePage, effectiveLimit));
             }
 
             if (StringUtils.hasText(airlineCode)) {
                 SearchValidation.ValidationResult codeValidation = SearchValidation.validateSearchQuery(airlineCode);
                 if (!codeValidation.isValid()) {
+                    log.debug("Airline code validation failed: {}", codeValidation.getErrorMessage());
                     return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError(codeValidation.getErrorMessage(), effectivePage, effectiveLimit));
                 }
             }
@@ -207,6 +215,7 @@ public class FlightController {
             try {
                 depDate = LocalDate.parse(departureDate);
             } catch (DateTimeParseException | NullPointerException e) {
+                log.debug("Departure date validation failed: invalid format");
                 return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError("Invalid departure date format. Expected YYYY-MM-DD", effectivePage, effectiveLimit));
             }
 
@@ -215,6 +224,7 @@ public class FlightController {
                 try {
                     retDate = LocalDate.parse(returnDate);
                 } catch (DateTimeParseException e) {
+                    log.debug("Return date validation failed: invalid format");
                     return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError("Invalid return date format. Expected YYYY-MM-DD", effectivePage, effectiveLimit));
                 }
             }
@@ -223,6 +233,7 @@ public class FlightController {
             try {
                 fareClass = FareClass.valueOf(seatClass.toUpperCase());
             } catch (Exception e) {
+                log.debug("Seat class validation failed: invalid value");
                 return ResponseEntity.badRequest().body(FlightSearchResponseBuilder.validationError("Invalid seat class. Valid values are: ECONOMY, BUSINESS, FIRST", effectivePage, effectiveLimit));
             }
 
