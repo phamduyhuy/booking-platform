@@ -3,7 +3,7 @@
     "database.hostname": "postgres",
     "database.port": "5432",
     "database.user": "postgres",
-    "database.password": "p0stgr3s",
+  "database.password": "p0stgr3s23!AG(fs)",
     "database.dbname": "payment_db",
     "database.server.name": "payment-db-server",
     "topic.prefix": "payment-db-server",

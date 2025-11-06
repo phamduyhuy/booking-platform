@@ -148,11 +148,7 @@ spring:
         version: 1.0.0
         type: sync
         base-url: /bookings
-        capabilities:
-          prompt: false
-          completion: false
-          resource: false
-          tool: true
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}

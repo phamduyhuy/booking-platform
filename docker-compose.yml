@@ -23,7 +23,7 @@ services:
       - booking-network
   # PostgreSQL Database
   postgres:
-    image: debezium/postgres:17-alpine
+    image: pgvector/pgvector:pg18
     user: postgres
     environment:
       POSTGRES_USER: ${DB_USERNAME}
@@ -40,7 +40,7 @@ services:
       - "5432:5432"
     networks:
       - booking-network
-    command: postgres -c wal_level=logical -c max_replication_slots=10 -c max_wal_senders=10
+    command: postgres -c wal_level=logical -c max_replication_slots=5 -c max_wal_senders=5
 
   # Redis for Event Deduplication
   redis:
