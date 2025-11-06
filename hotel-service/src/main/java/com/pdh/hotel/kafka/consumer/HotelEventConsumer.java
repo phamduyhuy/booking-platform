@@ -49,6 +49,9 @@ public class HotelEventConsumer {
             acknowledgment.acknowledge();
         } catch (Exception ex) {
             log.error("Error processing hotel saga command: {}", message, ex);
+            if (acknowledgment != null) {
+                acknowledgment.acknowledge();
+            }
         }
     }
 

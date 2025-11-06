@@ -37,81 +37,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 @RestController
 @RequestMapping("/chat")
 public class ChatController {
-    
-    private static final Logger logger = LoggerFactory.getLogger(ChatController.class);
+
     
     private final LLMAiService llmAiService;
     public ChatController( LLMAiService llmAiService) {
         this.llmAiService = llmAiService;
     }
-
-
-
-    /**
-     * Synchronous chat endpoint - Returns a complete structured response.
-     * 
-     * <p>Example Request:</p>
-     * <pre>
-     * POST /chat/message?conversationId={conversationId}
-     * {
-     *   "message": "Compare flights from Hanoi to Da Nang, Phu Quoc, and Nha Trang"
-     * }
-     * </pre>
-     * 
-     * @param request Chat message request
-     * @param conversationId The conversation ID for this chat
-     * @return Complete structured response
-     */
-    @PostMapping(path = "/message")
-    public ResponseEntity<StructuredChatPayload> sendMessage(@RequestBody ChatMessageRequest request) {
-        try {
-            // Extract username from OAuth2 principal
-            String username = AuthenticationUtils.extractUsername();
-            String conversationId = request.getConversationId(); // Extract from request body
-            String effectiveConversationId = conversationId != null ? conversationId : generateConversationId();
-            logger.info("💬 [CHAT-MESSAGE] Received message from user: {}, conversation: {}", 
-                       username, effectiveConversationId);
-
-            // Validate request
-            if (request.getMessage() == null || request.getMessage().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(StructuredChatPayload.builder()
-                    .message("Message cannot be empty")
-                    .results(java.util.List.of())
-                    .build());
-            }
-
-            // Process and return complete response
-            StructuredChatPayload response = llmAiService.processStructured(
-                request.getMessage(),
-                effectiveConversationId,
-                username
-            );
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            logger.error("❌ [CHAT-MESSAGE] Error processing message: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body(StructuredChatPayload.builder()
-                .message("Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.")
-                .results(java.util.List.of())
-                .build());
-        }
-    }
-    
-    private String generateConversationId() {
-        return java.util.UUID.randomUUID().toString();
-    }
-    
-    /**
-     * Health check endpoint.
-     * 
-     * @return Health status
-     */
-    @GetMapping("/health")
-    public ResponseEntity<String> health() {
-        return ResponseEntity.ok("Chat service is running with Agentic Workflow Orchestration (Sync Only)");
-    }
-
-
 
     @GetMapping("/history/{conversationId}")
     public ResponseEntity<ChatHistoryResponse> getChatHistory(@PathVariable String conversationId) {

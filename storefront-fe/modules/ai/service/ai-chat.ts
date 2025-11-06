@@ -9,14 +9,32 @@ import {
   ChatMessageResponse,
 } from '../types';
 
+type PendingChatRequest = {
+  requestId: string;
+  conversationId: string;
+  resolve: (response: ChatMessageResponse) => void;
+  reject: (error: Error) => void;
+  onEvent?: (event: ChatMessageResponse) => void;
+};
+
 class AiChatService {
   private baseUrl = '/ai';
+  private socket: WebSocket | null = null;
+  private socketReady: Promise<WebSocket> | null = null;
+  private currentRequest: PendingChatRequest | null = null;
 
   private generateRequestId(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
     return `ws-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  private generateConversationId(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   private getWebSocketUrl(): string {
@@ -36,11 +54,118 @@ class AiChatService {
     return value;
   }
 
-  private generateConversationId(): string {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
+  private cleanupSocket() {
+    this.currentRequest = null;
+    if (this.socket) {
+      this.socket.removeEventListener('message', this.handleSocketMessage);
+      this.socket.removeEventListener('close', this.handleSocketClose);
+      this.socket.removeEventListener('error', this.handleSocketError);
     }
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    this.socket = null;
+    this.socketReady = null;
+  }
+
+  private handleSocketError = (event: Event) => {
+    console.warn('AI chat WebSocket error:', event);
+    const pending = this.currentRequest;
+    this.currentRequest = null;
+    if (pending) {
+      pending.reject(new Error('WebSocket connection error'));
+    }
+    this.cleanupSocket();
+  };
+
+  private handleSocketClose = (event: CloseEvent) => {
+    const pending = this.currentRequest;
+    this.currentRequest = null;
+    this.cleanupSocket();
+
+    if (pending) {
+      const reason =
+        event.reason && event.reason.length > 0
+          ? event.reason
+          : `WebSocket closed (code ${event.code})`;
+      pending.reject(new Error(reason));
+    }
+  };
+
+  private handleSocketMessage = (event: MessageEvent) => {
+    let data: ChatMessageResponse;
+    try {
+      data = JSON.parse(event.data) as ChatMessageResponse;
+    } catch (err) {
+      console.error('Failed to parse AI chat payload', err);
+      return;
+    }
+
+    if (data.status === 'keepalive') {
+      return;
+    }
+
+    const pending = this.currentRequest;
+    if (!pending) {
+      console.warn('Received AI chat event with no pending request', data);
+      return;
+    }
+
+    data.requestId = data.requestId ?? pending.requestId;
+    data.conversationId = data.conversationId ?? pending.conversationId;
+    data.timestamp = this.normalizeTimestamp(data.timestamp);
+
+    pending.onEvent?.(data);
+
+    if (data.type === 'ERROR') {
+      this.currentRequest = null;
+      pending.reject(new Error(data.error || 'AI assistant encountered an error'));
+      return;
+    }
+
+    if (data.type === 'RESPONSE') {
+      this.currentRequest = null;
+      pending.resolve(data);
+    }
+  };
+
+  private async ensureSocket(): Promise<WebSocket> {
+    if (typeof window === 'undefined') {
+      throw new Error('WebSocket chat requires a browser environment');
+    }
+
+    if (this.socket) {
+      if (this.socket.readyState === WebSocket.OPEN) {
+        return this.socket;
+      }
+      if (this.socket.readyState === WebSocket.CONNECTING && this.socketReady) {
+        return this.socketReady;
+      }
+    }
+
+    const wsUrl = this.getWebSocketUrl();
+    const socket = new WebSocket(wsUrl);
+    this.socket = socket;
+
+    this.socketReady = new Promise<WebSocket>((resolve, reject) => {
+      const handleOpen = () => {
+        socket.removeEventListener('open', handleOpen);
+        socket.removeEventListener('error', handleInitialError);
+        socket.addEventListener('message', this.handleSocketMessage);
+        socket.addEventListener('close', this.handleSocketClose);
+        socket.addEventListener('error', this.handleSocketError);
+        resolve(socket);
+      };
+
+      const handleInitialError = (event: Event) => {
+        socket.removeEventListener('open', handleOpen);
+        socket.removeEventListener('error', handleInitialError);
+        this.cleanupSocket();
+        reject(new Error('WebSocket connection error'));
+      };
+
+      socket.addEventListener('open', handleOpen, { once: true });
+      socket.addEventListener('error', handleInitialError, { once: true });
+    });
+
+    return this.socketReady;
   }
 
   private mapPayloadToChatResponse(
@@ -62,6 +187,29 @@ class AiChatService {
     };
   }
 
+  private mapPayloadToChatMessageResponse(
+    payload: StructuredChatPayload,
+    extras: { userMessage: string; conversationId: string; requestId?: string }
+  ): ChatMessageResponse {
+    const suggestionsRaw = payload.nextRequestSuggestions ?? payload.next_request_suggestions;
+    const suggestions = Array.isArray(suggestionsRaw) ? suggestionsRaw : [];
+
+    return {
+      type: 'RESPONSE',
+      userId: '',
+      requestId: extras.requestId,
+      conversationId: extras.conversationId,
+      userMessage: extras.userMessage,
+      aiResponse: payload.message ?? '',
+      results: payload.results ?? [],
+      status: 'Completed',
+      timestamp: new Date().toISOString(),
+      nextRequestSuggestions: suggestions,
+      requiresConfirmation: payload.requiresConfirmation,
+      confirmationContext: payload.confirmationContext,
+    };
+  }
+
   async streamPrompt(
     message: string,
     options: {
@@ -74,72 +222,75 @@ class AiChatService {
       throw new Error('Message cannot be empty');
     }
 
+    if (this.currentRequest) {
+      throw new Error('Another AI chat request is already in progress. Please wait for it to complete.');
+    }
+
     const requestId = this.generateRequestId();
     const conversationId = options.conversationId ?? this.generateConversationId();
-    const wsUrl = this.getWebSocketUrl();
+    const socket = await this.ensureSocket();
 
     return new Promise<ChatMessageResponse>((resolve, reject) => {
-      let settled = false;
-      const socket = new WebSocket(wsUrl);
-
-      const cleanup = () => {
-        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
-          socket.close();
-        }
+      const pendingRequest: PendingChatRequest = {
+        requestId,
+        conversationId,
+        resolve,
+        reject,
+        onEvent: options.onEvent,
       };
 
-      socket.onopen = () => {
-        const payload = {
-          type: 'prompt',
-          requestId,
-          conversationId,
-          message: trimmed,
-          timestamp: Date.now(),
-        };
+      this.currentRequest = pendingRequest;
+
+      const payload = {
+        type: 'prompt',
+        requestId,
+        conversationId,
+        message: trimmed,
+        timestamp: Date.now(),
+      };
+
+      try {
         socket.send(JSON.stringify(payload));
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const data: ChatMessageResponse = JSON.parse(event.data);
-          if (data.status === 'keepalive') {
-            return;
-          }
-          data.requestId = data.requestId ?? requestId;
-          data.conversationId = data.conversationId ?? conversationId;
-          data.timestamp = this.normalizeTimestamp(data.timestamp);
-
-          options.onEvent?.(data);
-
-          if (data.type === 'ERROR') {
-            settled = true;
-            cleanup();
-            reject(new Error(data.error || 'AI assistant encountered an error'));
-          } else if (data.type === 'RESPONSE') {
-            settled = true;
-            cleanup();
-            resolve(data);
-          }
-        } catch (err) {
-          console.error('Failed to parse AI chat stream payload', err);
-        }
-      };
-
-      socket.onerror = () => {
-        if (!settled) {
-          settled = true;
-          cleanup();
-          reject(new Error('WebSocket connection error'));
-        }
-      };
-
-      socket.onclose = () => {
-        if (!settled) {
-          settled = true;
-          reject(new Error('WebSocket connection closed before completion'));
-        }
-      };
+      } catch (err: any) {
+        this.currentRequest = null;
+        this.cleanupSocket();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
     });
+  }
+
+  async sendPromptRest(
+    message: string,
+    options: { conversationId?: string; requestId?: string } = {}
+  ): Promise<ChatMessageResponse> {
+    const trimmed = message.trim();
+    if (!trimmed) {
+      throw new Error('Message cannot be empty');
+    }
+
+    const conversationId = options.conversationId ?? this.generateConversationId();
+
+    try {
+      const restPayload: ChatMessageRequest = {
+        message: trimmed,
+        conversationId,
+        timestamp: Date.now(),
+      };
+
+      const restResponse = await apiClient.post<StructuredChatPayload>(
+        `${this.baseUrl}/chat/message`,
+        restPayload
+      );
+
+      return this.mapPayloadToChatMessageResponse(restResponse, {
+        userMessage: trimmed,
+        conversationId,
+        requestId: options.requestId,
+      });
+    } catch (error: any) {
+      const messageText = error?.response?.data?.message || error?.message || 'Không thể gửi tin nhắn lúc này';
+      throw new Error(messageText);
+    }
   }
 
   /**
@@ -151,33 +302,63 @@ class AiChatService {
     message: string, 
     context?: ChatContext
   ): Promise<ChatResponse> {
+    const trimmed = message.trim();
+    if (!trimmed) {
+      throw new Error('Message cannot be empty');
+    }
+
+    const conversationId = context?.conversationId ?? this.generateConversationId();
+
     try {
-      const response = await this.streamPrompt(message, {
-        conversationId: context?.conversationId,
+      const response = await this.streamPrompt(trimmed, {
+        conversationId,
       });
 
+      const suggestions = response.nextRequestSuggestions ?? response.next_request_suggestions ?? [];
       return {
         userMessage: message,
         aiResponse: response.aiResponse ?? '',
-        conversationId: response.conversationId,
+        conversationId: response.conversationId ?? conversationId,
         requestId: response.requestId,
         userId: response.userId,
         timestamp: this.normalizeTimestamp(response.timestamp),
         results: response.results ?? [],
-        nextRequestSuggestions: response.nextRequestSuggestions ?? response.next_request_suggestions,
+        nextRequestSuggestions: suggestions,
         requiresConfirmation: response.requiresConfirmation,
         confirmationContext: response.confirmationContext,
       };
     } catch (error: any) {
       console.error('AI Chat Service Error:', error);
-      
+
+      // Attempt REST fallback if WebSocket fails
+      try {
+        const fallback = await this.sendPromptRest(message, { conversationId });
+        const suggestions = fallback.nextRequestSuggestions ?? fallback.next_request_suggestions ?? [];
+        return {
+          userMessage: message,
+          aiResponse: fallback.aiResponse ?? '',
+          conversationId: fallback.conversationId ?? conversationId,
+          requestId: fallback.requestId,
+          userId: fallback.userId,
+          timestamp: this.normalizeTimestamp(fallback.timestamp),
+          results: fallback.results ?? [],
+          nextRequestSuggestions: suggestions,
+          requiresConfirmation: fallback.requiresConfirmation,
+          confirmationContext: fallback.confirmationContext,
+        };
+      } catch (restError: any) {
+        console.error('AI Chat REST fallback error:', restError);
+      }
+
       // Return a fallback response
       return {
         userMessage: message,
         aiResponse: 'Xin lỗi, tôi đang gặp sự cố kỹ thuật. Vui lòng thử lại sau.',
-        conversationId: context?.conversationId || this.generateConversationId(),
+        conversationId,
         timestamp: new Date().toISOString(),
-        error: error.message || 'Không thể kết nối với AI service'
+        error: error?.message || 'Không thể kết nối với AI service',
+        results: [],
+        nextRequestSuggestions: []
       };
     }
   }

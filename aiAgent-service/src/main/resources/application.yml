@@ -6,25 +6,9 @@ server:
     max-http-form-post-size: 20MB
     max-swallow-size: 20MB
 keycloak:
-  client-id: storefront-bff
-  client-secret: 75eYfom5gp8FxX09a12MtZWKpAvwAA2U
-  username: phamduyhuy
-  password: Tun!8111474652
-  # Vector store configuration for default profile
-
-# OpenAPI Documentation Configuration
-#springdoc:
-#  api-docs:
-#    path: /api/docs
-#    enabled: true
-#  swagger-ui:
-#    path: /api/swagger-ui
-#    enabled: true
-#    operationsSorter: method
-#    tagsSorter: alpha
-#    try-it-out-enabled: true
-#  show-actuator: true
-
+  client-id: ai-agent
+  client-secret: ${BOOKING_SMART_AI_CLIENT_SECRET}
+  token-uri: ${KEYCLOAK_HOST}/realms/BookingSmart/protocol/openid-connect/token
 spring:
   profiles:
     active: local
@@ -40,9 +24,6 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
       enabled: true
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.mcp.client.autoconfigure.SseWebFluxTransportAutoConfiguration
   jpa:
     hibernate:
       ddl-auto: validate
@@ -67,24 +48,19 @@ spring:
         repository:
           jdbc:
             initialize-schema: never
-    vectorstore:
-      milvus:
-        client:
-          uri: ${MILVUS_URI}
-          token: ${MILVUS_TOKEN}
-        embedding-dimension: 1024
-        database-name: bookingsmart
-        collection-name: vector_store
-        index-type: hnsw
-        metric-type: cosine
-    mistralai:
-      api-key: ${MISTRAL_API_KEY}
-      chat:
-        options:
-          model: voxtral-mini-latest
-      embedding:
-        options:
-          model: mistral-embed
+langchain4j:
+  google-ai-gemini:
+
+    chat-model:
+      api-key: ${GEMINI_API_KEY}
+      model-name: gemini-2.5-flash
+      temperature: 0.1
+
+    streaming-chat-model:
+      api-key: ${GEMINI_API_KEY}
+      model-name: gemini-2.5-flash
+      temperature: 0.1
+
 
 ---
 spring:
@@ -110,25 +86,6 @@ spring:
       acks: all
       retries: 3
   ai:
-    mistralai:
-      api-key: ${MISTRAL_API_KEY}
-      chat:
-        options:
-          model: voxtral-mini-latest
-      embedding:
-        options:
-          model: mistral-embed
-
-    vectorstore:
-      
-      elasticsearch:
-        initialize-schema: true
-        index-name: bookingsmart-rag-index
-        dimensions: 1024
-        similarity: cosine
-        
-
-
     mcp:
       client:
         enabled: true
@@ -143,10 +100,10 @@ spring:
           connections:
             server1:
               url: http://localhost:8082
-              sse-endpoint: /hotels/sse
+              sse-endpoint: /hotels/mcp
             server2:
               url: http://localhost:8081
-              sse-endpoint: /flights/sse
+              sse-endpoint: /flights/mcp
         stdio:
           connections:
             openweather:
@@ -231,7 +188,7 @@ spring:
   elasticsearch:
     uris: ${ELASTIC_URIS}
   
-    
+
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -261,39 +218,7 @@ spring:
             token-uri: ${KEYCLOAK_HOST}/realms/BookingSmart/protocol/openid-connect/token
 
   ai:
-    retry:
-      exclude-on-http-codes: 429
-      on-client-errors: true
-
-    model:
-      embedding: ollama
-      
-    vectorstore:
-      elasticsearch:
-
-        dimensions: 768
-        similarity: cosine
-        initialize-schema: true     
-    ollama:
-      base-url: http://ollama:11434
-      embedding:
-        options:
-          model: nomic-embed-text:latest
-
-
-          
-    mistralai:
-      api-key: ${MISTRAL_API_KEY}
-      chat:
-        options:
-          model: mistral-medium-2508
-          temperature: 0.0
-
-
-            
-        
     mcp:
-
       client:
         enabled: true
         version: 1.0.0
@@ -307,16 +232,16 @@ spring:
           connections:
             hotel-mcp-server:
               url: http://hotel-service
-              sse-endpoint: /hotels/sse
+              sse-endpoint: /hotels/mcp
             flight-mcp-server:
               url: http://flight-service
-              sse-endpoint: /flights/sse
-            booking-mcp-server:
-              url: http://booking-service
-              sse-endpoint: /bookings/sse
-            payment-mcp-server:
-              url: http://payment-service
-              sse-endpoint: /payments/sse
+              sse-endpoint: /flights/mcp
+            # booking-mcp-server:
+            #   url: http://booking-service
+            #   sse-endpoint: /bookings/sse
+            # payment-mcp-server:
+            #   url: http://payment-service
+            #   sse-endpoint: /payments/sse
         
         stdio:
           connections:
@@ -360,7 +285,8 @@ spring:
                 BRAVE_API_KEY: ${BRAVE_API_KEY}
                 BRAVE_MCP_DISABLED_TOOLS: brave_news_search brave_web_search brave_summarizer	
         initialized: true
-  
+
+
 
 
 app:

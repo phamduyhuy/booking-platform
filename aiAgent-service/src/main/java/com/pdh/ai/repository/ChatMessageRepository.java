@@ -22,6 +22,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     Optional<ChatMessage> findTopByConversationIdOrderByTimestampDesc(String conversationId);
 
+    Optional<ChatMessage> findFirstByConversationIdAndParentMessageIsNullOrderByTimestampAsc(String conversationId);
+
     interface ConversationInfo {
         String getConversationId();
         String getTitle();

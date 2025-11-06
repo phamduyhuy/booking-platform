@@ -36,7 +36,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import reactor.core.scheduler.Schedulers;
 
@@ -128,19 +127,19 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .mode("stream")
                 .build();
 
-        AtomicReference<StructuredChatPayload> lastPayload = new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<StructuredChatPayload> latest = new java.util.concurrent.atomic.AtomicReference<>();
 
         llmAiService.streamStructured(
                         chatRequest.getMessage(),
                         chatRequest.getConversationId(),
                         userId
                 )
-                .publishOn(workerScheduler)
+                .subscribeOn(workerScheduler)
                 .subscribe(
                         payload -> {
-                            lastPayload.set(payload);
-                            ChatMessageResponse chunk = ChatMessageResponse.builder()
-                                    .type(ResponseType.PROCESSING)
+                            latest.set(payload);
+                            ChatMessageResponse response = ChatMessageResponse.builder()
+                                    .type(ResponseType.STREAM_UPDATE)
                                     .requestId(requestId)
                                     .conversationId(conversationId)
                                     .userId(userId)
@@ -152,11 +151,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                                     .confirmationContext(payload.getConfirmationContext())
                                     .status("Streaming")
                                     .timestamp(LocalDateTime.now())
+                                    .processingTimeMs(Duration.between(startedAt, Instant.now()).toMillis())
                                     .build();
-                            safeSend(session, chunk);
+                            safeSend(session, response);
                         },
                         throwable -> {
-                            log.error("❌ [AI-WS] Error streaming message. requestId={}, conversationId={}, user={}",
+                            log.error("❌ [AI-WS] Error processing message. requestId={}, conversationId={}, user={}",
                                     requestId, conversationId, userId, throwable);
                             safeSend(session, buildErrorResponse(requestId,
                                     "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
@@ -164,30 +164,29 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                                     userId));
                         },
                         () -> {
-                            StructuredChatPayload safePayload = lastPayload.get();
-                            if (safePayload == null) {
-                                safePayload = StructuredChatPayload.builder()
+                            StructuredChatPayload finalPayload = latest.get();
+                            if (finalPayload == null) {
+                                finalPayload = StructuredChatPayload.builder()
                                         .message("Xin lỗi, tôi không thể tạo phản hồi lúc này.")
                                         .results(List.of())
+                                        .nextRequestSuggestions(new String[0])
                                         .build();
                             }
-
                             ChatMessageResponse response = ChatMessageResponse.builder()
                                     .type(ResponseType.RESPONSE)
                                     .requestId(requestId)
                                     .conversationId(conversationId)
                                     .userId(userId)
                                     .userMessage(socketRequest.getMessage())
-                                    .aiResponse(safePayload.getMessage())
-                                    .results(safePayload.getResults())
-                                    .nextRequestSuggestions(extractSuggestions(safePayload))
-                                    .requiresConfirmation(Boolean.TRUE.equals(safePayload.getRequiresConfirmation()))
-                                    .confirmationContext(safePayload.getConfirmationContext())
+                                    .aiResponse(finalPayload.getMessage())
+                                    .results(finalPayload.getResults())
+                                    .nextRequestSuggestions(extractSuggestions(finalPayload))
+                                    .requiresConfirmation(Boolean.TRUE.equals(finalPayload.getRequiresConfirmation()))
+                                    .confirmationContext(finalPayload.getConfirmationContext())
                                     .status("Completed")
                                     .timestamp(LocalDateTime.now())
                                     .processingTimeMs(Duration.between(startedAt, Instant.now()).toMillis())
                                     .build();
-
                             safeSend(session, response);
                         }
                 );
@@ -255,12 +254,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (attributes != null) {
             Object usernameAttr = attributes.get("username");
             if (usernameAttr instanceof String username && StringUtils.hasText(username)) {
+                System.out.println("Found username in attributes: " + username);
                 return Optional.of(username);
             }
             Object jwtAttr = attributes.get("jwt");
             if (jwtAttr instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
                 String preferredUsername = jwt.getClaimAsString("preferred_username");
                 if (StringUtils.hasText(preferredUsername)) {
+                    System.out.println("Found preferred_username in JWT: " + preferredUsername);
                     return Optional.of(preferredUsername);
                 }
             }

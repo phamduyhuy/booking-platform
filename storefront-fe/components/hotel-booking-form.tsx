@@ -186,7 +186,7 @@ export function HotelBookingForm({ hotel, onSubmit, onCancel }: HotelBookingForm
       import('@/modules/hotel/service').then(module => {
         module.hotelService.getRoomDetails(selectedRoomTypeId)
         .then(updatedRoom => {
-          const newTotal = updatedRoom.price * numberOfNights * numberOfRooms;
+          const newTotal = updatedRoom.price * numberOfNights * numberOfRooms || 0;
           skipNextPriceToastRef.current = true;
           previousTotalRef.current = newTotal;
           setRoomPrice(updatedRoom.price);

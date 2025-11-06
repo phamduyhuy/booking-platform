@@ -309,46 +309,46 @@ export function BookingFlowManager({ onBookingComplete, showSelection = true }: 
       />
     )}
 
-      {step === 'passengers' && bookingType === 'flight' && activeFlight && (
-        <FlightBookingForm 
-          flight={activeFlight} 
-          onSubmit={handleFlightBookingSubmit}
-          onCancel={prevStep}
-        />
-      )}
-
-      {step === 'passengers' && bookingType === 'flight' && !activeFlight && (
-        <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-8 text-center space-y-4">
-          <h3 className="text-lg font-semibold">Không tìm thấy thông tin chuyến bay</h3>
-          <p className="text-muted-foreground">
-            Vui lòng quay lại bước trước để chọn chuyến bay hoặc mở lại gợi ý và chọn lại.
-          </p>
-          <div className="flex justify-center gap-3">
-            <Button variant="outline" onClick={prevStep}>Quay lại</Button>
-            <Button onClick={resetBooking}>Bắt đầu lại</Button>
+      {step === 'passengers' && bookingType === 'flight' && (
+        activeFlight ? (
+          <FlightBookingForm 
+            flight={activeFlight} 
+            onSubmit={handleFlightBookingSubmit}
+            onCancel={prevStep}
+          />
+        ) : (
+          <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-8 text-center space-y-4">
+            <h3 className="text-lg font-semibold">Không tìm thấy thông tin chuyến bay</h3>
+            <p className="text-muted-foreground">
+              Vui lòng quay lại bước trước để chọn chuyến bay hoặc mở lại gợi ý và chọn lại.
+            </p>
+            <div className="flex justify-center gap-3">
+              <Button variant="outline" onClick={prevStep}>Quay lại</Button>
+              <Button onClick={resetBooking}>Bắt đầu lại</Button>
+            </div>
           </div>
-        </div>
+        )
       )}
 
-      {step === 'passengers' && bookingType === 'hotel' && activeHotel && (
-        <HotelBookingForm 
-          hotel={activeHotel} 
-          onSubmit={handleHotelBookingSubmit}
-          onCancel={prevStep}
-        />
-      )}
-
-      {step === 'passengers' && bookingType === 'hotel' && !activeHotel && (
-        <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-8 text-center space-y-4">
-          <h3 className="text-lg font-semibold">Không tìm thấy thông tin khách sạn</h3>
-          <p className="text-muted-foreground">
-            Vui lòng quay lại bước trước để chọn khách sạn phù hợp hoặc mở lại đề xuất để tiếp tục.
-          </p>
-          <div className="flex justify-center gap-3">
-            <Button variant="outline" onClick={prevStep}>Quay lại</Button>
-            <Button onClick={resetBooking}>Bắt đầu lại</Button>
+      {step === 'passengers' && bookingType === 'hotel' && (
+        activeHotel ? (
+          <HotelBookingForm 
+            hotel={activeHotel} 
+            onSubmit={handleHotelBookingSubmit}
+            onCancel={prevStep}
+          />
+        ) : (
+          <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-8 text-center space-y-4">
+            <h3 className="text-lg font-semibold">Không tìm thấy thông tin khách sạn</h3>
+            <p className="text-muted-foreground">
+              Vui lòng quay lại bước trước để chọn khách sạn phù hợp hoặc mở lại đề xuất để tiếp tục.
+            </p>
+            <div className="flex justify-center gap-3">
+              <Button variant="outline" onClick={prevStep}>Quay lại</Button>
+              <Button onClick={resetBooking}>Bắt đầu lại</Button>
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {step === 'passengers' && bookingType === 'both' && (
@@ -394,57 +394,6 @@ export function BookingFlowManager({ onBookingComplete, showSelection = true }: 
             </div>
           )}
         </div>
-      )}
-      
-      {/* Fallback UI - if booking type was 'both' but has been changed to 'flight' or 'hotel' due to item removal */}
-      {step === 'passengers' && bookingType !== 'both' && (
-        <>
-          {bookingType === 'flight' && (
-            <>
-              {activeFlight ? (
-                <FlightBookingForm 
-                  flight={activeFlight} 
-                  onSubmit={handleFlightBookingSubmit}
-                  onCancel={prevStep}
-                />
-              ) : (
-                <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-8 text-center space-y-4">
-                  <h3 className="text-lg font-semibold">Không tìm thấy thông tin chuyến bay</h3>
-                  <p className="text-muted-foreground">
-                    Vui lòng quay lại bước trước để chọn chuyến bay hoặc mở lại gợi ý và chọn lại.
-                  </p>
-                  <div className="flex justify-center gap-3">
-                    <Button variant="outline" onClick={prevStep}>Quay lại</Button>
-                    <Button onClick={resetBooking}>Bắt đầu lại</Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          
-          {bookingType === 'hotel' && (
-            <>
-              {activeHotel ? (
-                <HotelBookingForm 
-                  hotel={activeHotel} 
-                  onSubmit={handleHotelBookingSubmit}
-                  onCancel={prevStep}
-                />
-              ) : (
-                <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-8 text-center space-y-4">
-                  <h3 className="text-lg font-semibold">Không tìm thấy thông tin khách sạn</h3>
-                  <p className="text-muted-foreground">
-                    Vui lòng quay lại bước trước để chọn khách sạn phù hợp hoặc mở lại đề xuất để tiếp tục.
-                  </p>
-                  <div className="flex justify-center gap-3">
-                    <Button variant="outline" onClick={prevStep}>Quay lại</Button>
-                    <Button onClick={resetBooking}>Bắt đầu lại</Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </>
       )}
 
       {step === 'review' && (

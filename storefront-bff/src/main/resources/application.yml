@@ -171,7 +171,7 @@ spring:
               predicates:
                 - Path=/api/ai/ws/**
               filters:
-                - RewritePath=/api/ai/ws/(?<segment>.*), /ai/ws/${segment}
+                - RewritePath=/api/ai/ws/(?<segment>.*), /ws/${segment}
                 - WebSocketTokenRelay
           default-filters:
             - SaveSession
