@@ -93,11 +93,7 @@ spring:
         version: 1.0.0
         type: sync
         base-url: /payments
-        capabilities:
-          prompt: false
-          completion: false
-          resource: false
-          tool: true
+
   security:
     oauth2:
       resourceserver:

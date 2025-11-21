@@ -5,6 +5,7 @@ server:
   tomcat:
     max-http-form-post-size: 20MB
     max-swallow-size: 20MB
+<<<<<<< HEAD
     connection-timeout: 600000  # 10 minutes in milliseconds
     threads:
       max: 200
@@ -30,6 +31,12 @@ server:
 #    try-it-out-enabled: true
 #  show-actuator: true
 
+=======
+keycloak:
+  client-id: ai-agent
+  client-secret: ${BOOKING_SMART_AI_CLIENT_SECRET}
+  token-uri: ${KEYCLOAK_HOST}/realms/BookingSmart/protocol/openid-connect/token
+>>>>>>> origin/dev
 spring:
   profiles:
     active: local
@@ -45,9 +52,6 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
       enabled: true
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.mcp.client.webflux.autoconfigure.SseWebFluxTransportAutoConfiguration
   jpa:
     hibernate:
       ddl-auto: validate
@@ -72,24 +76,19 @@ spring:
         repository:
           jdbc:
             initialize-schema: never
-    vectorstore:
-      milvus:
-        client:
-          uri: ${MILVUS_URI}
-          token: ${MILVUS_TOKEN}
-        embedding-dimension: 1024
-        database-name: bookingsmart
-        collection-name: vector_store
-        index-type: hnsw
-        metric-type: cosine
-    mistralai:
-      api-key: ${MISTRAL_API_KEY}
-      chat:
-        options:
-          model: voxtral-mini-latest
-      embedding:
-        options:
-          model: mistral-embed
+langchain4j:
+  google-ai-gemini:
+
+    chat-model:
+      api-key: ${GEMINI_API_KEY}
+      model-name: gemini-2.5-flash
+      temperature: 0.1
+
+    streaming-chat-model:
+      api-key: ${GEMINI_API_KEY}
+      model-name: gemini-2.5-flash
+      temperature: 0.1
+
 
 ---
 spring:
@@ -126,25 +125,6 @@ spring:
       acks: all
       retries: 3
   ai:
-    mistralai:
-      api-key: ${MISTRAL_API_KEY}
-      chat:
-        options:
-          model: voxtral-mini-latest
-      embedding:
-        options:
-          model: mistral-embed
-
-    vectorstore:
-      
-      elasticsearch:
-        initialize-schema: true
-        index-name: bookingsmart-rag-index
-        dimensions: 1024
-        similarity: cosine
-        
-
-
     mcp:
       client:
         enabled: true
@@ -159,9 +139,10 @@ spring:
           connections:
             server1:
               url: http://localhost:8082
-              sse-endpoint: /hotels/sse
+              sse-endpoint: /hotels/mcp
             server2:
               url: http://localhost:8081
+<<<<<<< HEAD
               sse-endpoint: /flights/sse
             customer-server:
               url: http://localhost:8084
@@ -169,6 +150,9 @@ spring:
             payment-server:
               url: http://localhost:8085
               sse-endpoint: /payments/sse
+=======
+              sse-endpoint: /flights/mcp
+>>>>>>> origin/dev
         stdio:
           connections:
             openweather:
@@ -264,7 +248,7 @@ spring:
   elasticsearch:
     uris: ${ELASTIC_URIS}
   
-    
+
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -294,6 +278,7 @@ spring:
             token-uri: ${KEYCLOAK_HOST}/realms/BookingSmart/protocol/openid-connect/token
 
   ai:
+<<<<<<< HEAD
     retry:
       exclude-on-http-codes: 429
       on-client-errors: true
@@ -331,6 +316,8 @@ spring:
 
 
 
+=======
+>>>>>>> origin/dev
     mcp:
       client:
         enabled: true
@@ -345,9 +332,10 @@ spring:
           connections:
             hotel-mcp-server:
               url: http://hotel-service
-              sse-endpoint: /hotels/sse
+              sse-endpoint: /hotels/mcp
             flight-mcp-server:
               url: http://flight-service
+<<<<<<< HEAD
               sse-endpoint: /flights/sse
             customer-mcp-server:
               url: http://customer-service
@@ -358,6 +346,15 @@ spring:
             payment-mcp-server:
               url: http://payment-service
               sse-endpoint: /payments/sse
+=======
+              sse-endpoint: /flights/mcp
+            # booking-mcp-server:
+            #   url: http://booking-service
+            #   sse-endpoint: /bookings/sse
+            # payment-mcp-server:
+            #   url: http://payment-service
+            #   sse-endpoint: /payments/sse
+>>>>>>> origin/dev
         
         stdio:
           connections:

@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/14-01-changelog.sql
   - include:
       file: db/changelog/15-01-changelog.sql
+  - include:
+      file: db/changelog/004-changelog.sql

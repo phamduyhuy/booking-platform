@@ -135,9 +135,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .conversationId(conversationId)
                 .message(socketRequest.getMessage())
                 .timestamp(socketRequest.getTimestamp())
-                .mode("sync")
+                .mode("stream")
                 .build();
 
+<<<<<<< HEAD
         // Start periodic keep-alive to prevent timeout during long AI processing
         ScheduledFuture<?> keepAlive = workerPool.scheduleAtFixedRate(() -> {
             if (session.isOpen()) {
@@ -162,6 +163,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                                 username,  // Username for conversationKey format (username:convId)
                                 userId     // Real userId (UUID from JWT sub) for MCP tools
                         )
+=======
+        java.util.concurrent.atomic.AtomicReference<StructuredChatPayload> latest = new java.util.concurrent.atomic.AtomicReference<>();
+
+        llmAiService.streamStructured(
+                        chatRequest.getMessage(),
+                        chatRequest.getConversationId(),
+                        userId
+>>>>>>> origin/dev
                 )
                 .subscribeOn(workerScheduler)
                 .doFinally(signalType -> {
@@ -171,30 +180,22 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 })
                 .subscribe(
                         payload -> {
-                            StructuredChatPayload safePayload = payload;
-                            if (safePayload == null) {
-                                safePayload = StructuredChatPayload.builder()
-                                        .message("Xin lỗi, tôi không thể tạo phản hồi lúc này.")
-                                        .results(List.of())
-                                        .build();
-                            }
-
+                            latest.set(payload);
                             ChatMessageResponse response = ChatMessageResponse.builder()
-                                    .type(ResponseType.RESPONSE)
+                                    .type(ResponseType.STREAM_UPDATE)
                                     .requestId(requestId)
                                     .conversationId(conversationId)
                                     .userId(username)  // Display username
                                     .userMessage(socketRequest.getMessage())
-                                    .aiResponse(safePayload.getMessage())
-                                    .results(safePayload.getResults())
-                                    .nextRequestSuggestions(extractSuggestions(safePayload))
-                                    .requiresConfirmation(Boolean.TRUE.equals(safePayload.getRequiresConfirmation()))
-                                    .confirmationContext(safePayload.getConfirmationContext())
-                                    .status("Completed")
+                                    .aiResponse(payload.getMessage())
+                                    .results(payload.getResults())
+                                    .nextRequestSuggestions(extractSuggestions(payload))
+                                    .requiresConfirmation(Boolean.TRUE.equals(payload.getRequiresConfirmation()))
+                                    .confirmationContext(payload.getConfirmationContext())
+                                    .status("Streaming")
                                     .timestamp(LocalDateTime.now())
                                     .processingTimeMs(Duration.between(startedAt, Instant.now()).toMillis())
                                     .build();
-
                             safeSend(session, response);
                         },
                         throwable -> {
@@ -203,7 +204,37 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                             safeSend(session, buildErrorResponse(requestId,
                                     "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
                                     conversationId,
+<<<<<<< HEAD
                                     username));
+=======
+                                    userId));
+                        },
+                        () -> {
+                            StructuredChatPayload finalPayload = latest.get();
+                            if (finalPayload == null) {
+                                finalPayload = StructuredChatPayload.builder()
+                                        .message("Xin lỗi, tôi không thể tạo phản hồi lúc này.")
+                                        .results(List.of())
+                                        .nextRequestSuggestions(new String[0])
+                                        .build();
+                            }
+                            ChatMessageResponse response = ChatMessageResponse.builder()
+                                    .type(ResponseType.RESPONSE)
+                                    .requestId(requestId)
+                                    .conversationId(conversationId)
+                                    .userId(userId)
+                                    .userMessage(socketRequest.getMessage())
+                                    .aiResponse(finalPayload.getMessage())
+                                    .results(finalPayload.getResults())
+                                    .nextRequestSuggestions(extractSuggestions(finalPayload))
+                                    .requiresConfirmation(Boolean.TRUE.equals(finalPayload.getRequiresConfirmation()))
+                                    .confirmationContext(finalPayload.getConfirmationContext())
+                                    .status("Completed")
+                                    .timestamp(LocalDateTime.now())
+                                    .processingTimeMs(Duration.between(startedAt, Instant.now()).toMillis())
+                                    .build();
+                            safeSend(session, response);
+>>>>>>> origin/dev
                         }
                 );
     }

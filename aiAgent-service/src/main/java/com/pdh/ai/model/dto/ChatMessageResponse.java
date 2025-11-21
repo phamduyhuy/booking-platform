@@ -34,6 +34,7 @@ public class ChatMessageResponse {
      */
     public enum ResponseType {
         PROCESSING,  // AI is processing the message
+        STREAM_UPDATE, // Partial streaming update
         RESPONSE,    // Final response ready
         ERROR        // Error occurred
     }

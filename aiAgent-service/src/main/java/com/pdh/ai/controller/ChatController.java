@@ -37,14 +37,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 @RestController
 @RequestMapping("/chat")
 public class ChatController {
-    
-    private static final Logger logger = LoggerFactory.getLogger(ChatController.class);
+
     
     private final LLMAiService llmAiService;
     public ChatController( LLMAiService llmAiService) {
         this.llmAiService = llmAiService;
     }
 
+<<<<<<< HEAD
 
 
     /**
@@ -116,6 +116,8 @@ public class ChatController {
 
 
 
+=======
+>>>>>>> origin/dev
     @GetMapping("/history/{conversationId}")
     public ResponseEntity<ChatHistoryResponse> getChatHistory(@PathVariable String conversationId) {
         try {
