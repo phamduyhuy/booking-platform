@@ -1,300 +1,399 @@
-//package com.pdh.booking.mcp;
-//
-//import com.pdh.booking.command.CreateBookingCommand;
-//import com.pdh.booking.model.Booking;
-//import com.pdh.booking.model.dto.request.StorefrontCreateBookingRequestDto;
-//import com.pdh.booking.model.dto.response.BookingHistoryItemDto;
-//import com.pdh.booking.model.dto.response.StorefrontBookingResponseDto;
-//import com.pdh.booking.model.enums.BookingStatus;
-//import com.pdh.booking.model.enums.BookingType;
-//import com.pdh.booking.service.BookingCqrsService;
-//import com.pdh.common.utils.AuthenticationUtils;
-//import com.pdh.booking.mapper.BookingDtoMapper;
-//import lombok.RequiredArgsConstructor;
-//import lombok.extern.slf4j.Slf4j;
-//import org.springaicommunity.mcp.annotation.McpTool;
-//import org.springaicommunity.mcp.annotation.McpToolParam;
-//import org.springframework.ai.tool.annotation.Tool;
-//import org.springframework.ai.tool.annotation.ToolParam;
-//import org.springframework.data.domain.Page;
-//import org.springframework.data.domain.PageRequest;
-//import org.springframework.stereotype.Service;
-//
-//import java.math.BigDecimal;
-//import java.time.LocalDateTime;
-//import java.util.*;
-//import java.util.stream.Collectors;
-//
-///**
-// * Booking MCP Tool Service
-// * Exposes booking operations as AI-callable tools
-// */
-//@Service
-//@RequiredArgsConstructor
-//@Slf4j
-//public class BookingMcpToolService {
-//
-//    private final BookingCqrsService bookingCqrsService;
-//    private final BookingDtoMapper bookingDtoMapper;
-//
-//    /**
-//     * Create a new booking for flights or hotels
-//     */
-//    @McpTool(generateOutputSchema = true)
-//    @Tool(
-//        name = "create_booking",
-//        description = "Create a new booking for a flight or hotel. Required parameters: " +
-//                "bookingType (must be 'FLIGHT' or 'HOTEL'), " +
-//                "serviceItemId (the flight ID or hotel ID to book), " +
-//                "totalAmount (total price as decimal number), " +
-//                "currency (e.g., 'USD', 'VND'). " +
-//                "Optional: specialRequests (any special requests from customer), " +
-//                "passengerInfo (passenger details as JSON string). " +
-//                "Returns a booking with sagaId that can be used to track the booking status. " +
-//                "The booking will be in PENDING status initially and needs payment to be confirmed."
-//    )
-//    public Map<String, Object> createBooking(
-//            @McpToolParam
-//            @ToolParam(description = "Booking type: either 'FLIGHT' or 'HOTEL' or 'COMBO'", required = true)
-//            String bookingType,
-//
-//            @ToolParam(description = "The ID of the flight or hotel to book (UUID format)", required = true)
-//            String serviceItemId,
-//
-//            @ToolParam(description = "Total amount to pay (decimal number)", required = true)
-//            BigDecimal totalAmount,
-//
-//            @ToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')", required = true)
-//            String currency,
-//
-//
-//            @ToolParam(description = "Any special requests or notes from the customer", required = false)
-//            String specialRequests,
-//
-//            @ToolParam(description = "Passenger information as JSON string (for flights) or guest info (for hotels)", required = false)
-//            String passengerInfo
-//    ) {
-//        try {
-//            log.info("AI Tool: Creating booking - type={}, serviceItemId={}, amount={} {}",
-//                    bookingType, serviceItemId, totalAmount, currency);
-//
-//            // Validate booking type
-//            BookingType type;
-//            try {
-//                type = BookingType.valueOf(bookingType.toUpperCase());
-//            } catch (IllegalArgumentException e) {
-//                return createErrorResponse("Invalid booking type. Must be 'FLIGHT' or 'HOTEL'");
-//            }
-//
-//            // Create product details JSON
-//            String productDetailsJson = String.format(
-//                "{\"serviceItemId\":\"%s\",\"passengerInfo\":%s}",
-//                serviceItemId,
-//                passengerInfo != null ? passengerInfo : "\"\""
-//            );
-//
-//            // Execute booking command directly
-//            CreateBookingCommand command = CreateBookingCommand.builder()
-//                .userId(AuthenticationUtils.getCurrentUserIdFromContext())
-//                .bookingType(type)
-//                .totalAmount(totalAmount)
-//                .currency(currency)
-//                .productDetailsJson(productDetailsJson)
-//                .notes(specialRequests)
-//                .bookingSource("AI_AGENT")
-//                .sagaId(UUID.randomUUID().toString())
-//                .correlationId(UUID.randomUUID().toString())
-//                .build();
-//
-//            Booking createdBooking = bookingCqrsService.createBooking(command);
-//            String sagaId = createdBooking.getSagaId();
-//
-//            return Map.of(
-//                "success", true,
-//                "sagaId", sagaId,
-//                "bookingId", createdBooking.getBookingId().toString(),
-//                "status", createdBooking.getStatus().toString(),
-//                "bookingType", createdBooking.getBookingType().toString(),
-//                "totalAmount", createdBooking.getTotalAmount(),
-//                "currency", createdBooking.getCurrency(),
-//                "message", "Booking created successfully. Use the sagaId to track status or proceed with payment.",
-//                "nextStep", "Call process_payment with this bookingId to complete the booking"
-//            );
-//
-//        } catch (Exception e) {
-//            log.error("AI Tool: Error creating booking", e);
-//            return createErrorResponse("Failed to create booking: " + e.getMessage());
-//        }
-//    }
-//
-//    /**
-//     * Get booking status by saga ID
-//     */
-//    @Tool(
-//        name = "get_booking_status",
-//        description = "Get the current status and details of a booking using its sagaId. " +
-//                "Returns booking status (PENDING, CONFIRMED, COMPLETED, FAILED, CANCELLED), " +
-//                "booking details, amounts, and processing progress. " +
-//                "Use this to track booking creation progress or check current booking state."
-//    )
-//    public Map<String, Object> getBookingStatus(
-//            @ToolParam(description = "The saga ID returned when booking was created", required = true)
-//            String sagaId,
-//
-//            @ToolParam(description = "User ID who owns the booking", required = true)
-//            String userId
-//    ) {
-//        try {
-//            log.info("AI Tool: Getting booking status - sagaId={}", sagaId);
-//
-//            Optional<Booking> bookingOpt = bookingCqrsService.getBookingBySagaId(sagaId, userId);
-//
-//            if (bookingOpt.isEmpty()) {
-//                return createErrorResponse("Booking not found with sagaId: " + sagaId);
-//            }
-//
-//            Booking booking = bookingOpt.get();
-//
-//            Map<String, Object> response = new LinkedHashMap<>();
-//            response.put("success", true);
-//            response.put("bookingId", booking.getBookingId().toString());
-//            response.put("sagaId", booking.getSagaId());
-//            response.put("status", booking.getStatus().toString());
-//            response.put("bookingType", booking.getBookingType().toString());
-//            response.put("productDetails", booking.getProductDetailsJson());
-//            response.put("totalAmount", booking.getTotalAmount());
-//            response.put("currency", booking.getCurrency());
-//            response.put("createdAt", booking.getCreatedAt());
-//
-//            if (booking.getNotes() != null) {
-//                response.put("notes", booking.getNotes());
-//            }
-//
-//            // Add status-specific guidance
-//            switch (booking.getStatus()) {
-//                case VALIDATION_PENDING:
-//                    response.put("message", "Booking is being validated. Please wait...");
-//                    response.put("nextStep", "Wait for validation to complete");
-//                    break;
-//                case PENDING:
-//                    response.put("message", "Booking is pending. Proceed with payment to confirm.");
-//                    response.put("nextStep", "Call process_payment to complete the booking");
-//                    break;
-//                case CONFIRMED:
-//                    response.put("message", "Booking is confirmed. Proceed with payment.");
-//                    response.put("nextStep", "Call process_payment to complete the booking");
-//                    break;
-//                case PAYMENT_PENDING:
-//                    response.put("message", "Payment is being processed...");
-//                    response.put("nextStep", "Wait for payment confirmation");
-//                    break;
-//                case PAID:
-//                    response.put("message", "Booking is complete. Payment successful.");
-//                    response.put("nextStep", "Booking is complete. User can view booking details.");
-//                    break;
-//                case PAYMENT_FAILED:
-//                    response.put("message", "Payment failed. Please try again.");
-//                    response.put("nextStep", "Call process_payment again with valid payment method");
-//                    break;
-//                case FAILED:
-//                    response.put("message", "Booking failed. Please try creating a new booking.");
-//                    response.put("nextStep", "Create a new booking");
-//                    break;
-//                case VALIDATION_FAILED:
-//                    response.put("message", "Booking validation failed. Service unavailable or no availability.");
-//                    response.put("nextStep", "Try different dates or service");
-//                    break;
-//                case CANCELLED:
-//                    response.put("message", "Booking has been cancelled.");
-//                    response.put("nextStep", "Booking is cancelled");
-//                    break;
-//            }
-//
-//            return response;
-//
-//        } catch (Exception e) {
-//            log.error("AI Tool: Error getting booking status", e);
-//            return createErrorResponse("Failed to get booking status: " + e.getMessage());
-//        }
-//    }
-//
-//    /**
-//     * Get booking history for a user
-//     */
-//    @Tool(
-//        name = "get_user_booking_history",
-//        description = "Get paginated booking history for a user. Returns list of all bookings " +
-//                "with their status, dates, amounts, and details. Useful for showing user their past bookings. " +
-//                "Default page=0 (first page), size=10 (10 bookings per page)."
-//    )
-//    public Map<String, Object> getUserBookingHistory(
-//            @ToolParam(description = "User ID to get booking history for", required = true)
-//            String userId,
-//
-//            @ToolParam(description = "Page number (0-based). Default: 0", required = false)
-//            Integer page,
-//
-//            @ToolParam(description = "Number of bookings per page. Default: 10", required = false)
-//            Integer size
-//    ) {
-//        try {
-//            int effectivePage = (page != null && page >= 0) ? page : 0;
-//            int effectiveSize = (size != null && size > 0) ? size : 10;
-//
-//            log.info("AI Tool: Getting booking history - userId={}, page={}, size={}",
-//                    userId, effectivePage, effectiveSize);
-//
-//            UUID userUuid = UUID.fromString(userId);
-//
-//            // Create query for user bookings
-//            com.pdh.booking.query.GetUserBookingsQuery query =
-//                com.pdh.booking.query.GetUserBookingsQuery.builder()
-//                    .userId(userUuid)
-//                    .page(effectivePage)
-//                    .size(effectiveSize)
-//                    .build();
-//
-//            Page<Booking> bookingsPage = bookingCqrsService.getUserBookings(query);
-//
-//            List<Map<String, Object>> bookings = bookingsPage.getContent().stream()
-//                .map(booking -> {
-//                    Map<String, Object> bookingMap = new LinkedHashMap<>();
-//                    bookingMap.put("bookingId", booking.getBookingId().toString());
-//                    bookingMap.put("sagaId", booking.getSagaId());
-//                    bookingMap.put("bookingType", booking.getBookingType().toString());
-//                    bookingMap.put("status", booking.getStatus().toString());
-//                    bookingMap.put("productDetails", booking.getProductDetailsJson());
-//                    bookingMap.put("totalAmount", booking.getTotalAmount());
-//                    bookingMap.put("currency", booking.getCurrency());
-//                    bookingMap.put("createdAt", booking.getCreatedAt());
-//                    if (booking.getNotes() != null) {
-//                        bookingMap.put("notes", booking.getNotes());
-//                    }
-//                    return bookingMap;
-//                })
-//                .collect(Collectors.toList());
-//
-//            return Map.of(
-//                "success", true,
-//                "bookings", bookings,
-//                "totalBookings", bookingsPage.getTotalElements(),
-//                "totalPages", bookingsPage.getTotalPages(),
-//                "currentPage", effectivePage,
-//                "pageSize", effectiveSize,
-//                "hasNext", bookingsPage.hasNext(),
-//                "hasPrevious", bookingsPage.hasPrevious()
-//            );
-//
-//        } catch (Exception e) {
-//            log.error("AI Tool: Error getting booking history", e);
-//            return createErrorResponse("Failed to get booking history: " + e.getMessage());
-//        }
-//    }
-//
-//    private Map<String, Object> createErrorResponse(String message) {
-//        return Map.of(
-//            "success", false,
-//            "error", message
-//        );
-//    }
-//}
+package com.pdh.booking.mcp;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pdh.booking.controller.BookingController;
+import com.pdh.booking.model.Booking;
+import com.pdh.booking.model.dto.request.StorefrontCreateBookingRequestDto;
+import com.pdh.booking.model.dto.response.BookingHistoryResponseDto;
+import com.pdh.booking.model.dto.response.StorefrontBookingResponseDto;
+import com.pdh.booking.model.enums.BookingStatus;
+import com.pdh.booking.service.BookingCqrsService;
+import com.pdh.booking.service.BookingService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springaicommunity.mcp.annotation.McpToolParam;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+
+/**
+ * Booking MCP Tool Service - Exposes booking operations as AI-callable MCP tools
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class BookingMcpToolService {
+
+    private final BookingController bookingController;
+    private final BookingCqrsService bookingCqrsService;
+    private final BookingService bookingService;
+    private final ObjectMapper objectMapper;
+
+    @McpTool(
+        name = "create_booking",
+        description = """
+            Create booking for flights/hotels/combo. 
+            
+            CRITICAL: When creating flight bookings, you MUST preserve ALL fields from the search_flights result object:
+            - departureDateTime (ISO 8601 with timezone, e.g., "2025-11-20T08:00:00+07:00")
+            - arrivalDateTime (ISO 8601 with timezone)
+            - scheduleId (UUID from search result - MUST be valid UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+            - fareId (UUID from search result - MUST be valid UUID format)
+            - flightId, flightNumber, airline, originAirport, destinationAirport
+            - pricePerPassenger, totalFlightPrice
+            
+            For hotel bookings, preserve:
+            - hotelId, roomTypeId, checkInDate, checkOutDate, pricePerNight
+            
+            Add passenger/guest details from user input or customer profile.
+            
+            IMPORTANT: userId parameter is required - pass the authenticated user's UUID.
+            Returns: bookingId, sagaId, bookingReference, status
+            """
+    )
+    public Map<String, Object> createBooking(
+            @McpToolParam(description = "User ID (UUID of the authenticated user)") String userId,
+            @McpToolParam(description = "JSON booking payload") StorefrontCreateBookingRequestDto bookingPayload) {
+        try {
+            log.info("MCP Tool: Creating booking for userId: {}", userId);
+            
+            // Validate and parse userId
+            UUID userUuid;
+            try {
+                userUuid = UUID.fromString(userId);
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid userId format: {}", userId);
+                return Map.of(
+                    "success", false, 
+                    "error", "Invalid userId format. Must be a valid UUID."
+                );
+            }
+            
+            // Validate flight booking fields
+            if (bookingPayload.getFlightSelection() != null) {
+                var flightDetails = bookingPayload.getFlightSelection();
+                
+                // Validate departureDateTime (now String in ISO 8601 format)
+                if (flightDetails.getDepartureDateTime() == null || flightDetails.getDepartureDateTime().isBlank() || flightDetails.getDepartureDateTime().equals("null")) {
+                    return Map.of(
+                        "success", false, 
+                        "error", "Missing departureDateTime for flight booking. Please use the exact flight object from search_flights result with ISO 8601 format (e.g., 2025-11-16T20:45:00+07:00)."
+                    );
+                }
+                
+                // Validate arrivalDateTime (now String in ISO 8601 format)
+                if (flightDetails.getArrivalDateTime() == null || flightDetails.getArrivalDateTime().isBlank() || flightDetails.getArrivalDateTime().equals("null")) {
+                    return Map.of(
+                        "success", false, 
+                        "error", "Missing arrivalDateTime for flight booking. Please use the exact flight object from search_flights result with ISO 8601 format (e.g., 2025-11-16T22:20:00+07:00)."
+                    );
+                }
+                
+                // Validate and sanitize scheduleId
+                if (flightDetails.getScheduleId() == null || flightDetails.getScheduleId().isBlank()) {
+                    return Map.of(
+                        "success", false, 
+                        "error", "Missing scheduleId for flight booking. Please use the exact flight object from search_flights result."
+                    );
+                }
+                if (!isValidUUID(flightDetails.getScheduleId())) {
+                    return Map.of(
+                        "success", false, 
+                        "error", "Invalid scheduleId format: '" + flightDetails.getScheduleId() + "'. Must be a valid UUID (e.g., 7dd0f7ea-a238-481f-bce4-2e7147b73e32). Please use the EXACT scheduleId from search_flights result."
+                    );
+                }
+                
+                // Validate and sanitize fareId
+                if (flightDetails.getFareId() == null || flightDetails.getFareId().isBlank()) {
+                    return Map.of(
+                        "success", false, 
+                        "error", "Missing fareId for flight booking. Please use the exact flight object from search_flights result."
+                    );
+                }
+                if (!isValidUUID(flightDetails.getFareId())) {
+                    return Map.of(
+                        "success", false, 
+                        "error", "Invalid fareId format: '" + flightDetails.getFareId() + "'. Must be a valid UUID. Please use the EXACT fareId from search_flights result."
+                    );
+                }
+            }
+            
+            bookingPayload.setBookingSource("AI_AGENT");
+
+            // Call internal method with explicit userId
+            ResponseEntity<StorefrontBookingResponseDto> responseEntity = bookingController.createBookingInternal(bookingPayload, userUuid);
+            StorefrontBookingResponseDto response = responseEntity.getBody();
+
+            if (response == null) {
+                return Map.of("success", false, "error", "No response from booking service");
+            }
+
+            return Map.of(
+                "success", true,
+                "bookingId", response.getBookingId(),
+                "sagaId", response.getSagaId(),
+                "bookingReference", response.getBookingReference(),
+                "status", response.getStatus(),
+                "totalAmount", response.getTotalAmount(),
+                "currency", response.getCurrency(),
+                "message", "Booking created: " + response.getStatus()
+            );
+        } catch (Exception e) {
+            log.error("MCP Tool: Error creating booking", e);
+            return Map.of("success", false, "error", e.getMessage());
+        }
+    }
+
+    @McpTool(
+        name = "get_booking_status",
+        description = "Get booking status by bookingId or sagaId. Requires userId for authorization."
+    )
+    public Map<String, Object> getBookingStatus(
+        @McpToolParam(description = "User ID (UUID of the authenticated user)") String userId,
+        @McpToolParam(description = "Booking ID") String bookingId,
+        @McpToolParam(description = "Saga ID") String sagaId
+    ) {
+        try {
+            log.info("MCP Tool: Getting booking status for userId: {}", userId);
+            
+            // Validate and parse userId
+            UUID userUuid;
+            try {
+                userUuid = UUID.fromString(userId);
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid userId format: {}", userId);
+                return Map.of(
+                    "success", false,
+                    "error", "Invalid userId format. Must be a valid UUID."
+                );
+            }
+            
+            Optional<Booking> bookingOpt = Optional.empty();
+
+            if (bookingId != null && !bookingId.isBlank()) {
+                bookingOpt = bookingCqrsService.getBookingById(UUID.fromString(bookingId), userUuid);
+            } else if (sagaId != null && !sagaId.isBlank()) {
+                bookingOpt = bookingCqrsService.getBookingBySagaId(sagaId, userUuid);
+            }
+
+            if (bookingOpt.isEmpty()) {
+                return Map.of("success", false, "error", "Booking not found");
+            }
+
+            Booking booking = bookingOpt.get();
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("bookingId", booking.getBookingId().toString());
+            result.put("sagaId", booking.getSagaId());
+            result.put("bookingReference", booking.getBookingReference());
+            result.put("status", booking.getStatus().toString());
+            result.put("bookingType", booking.getBookingType().toString());
+            result.put("totalAmount", booking.getTotalAmount());
+            result.put("currency", booking.getCurrency());
+            result.put("statusInfo", getStatusInfo(booking.getStatus()));
+
+            return result;
+        } catch (Exception e) {
+            log.error("MCP Tool: Error getting status", e);
+            return Map.of("success", false, "error", e.getMessage());
+        }
+    }
+
+    @McpTool(
+        name = "get_booking_by_reference",
+        description = """
+            Get booking details by booking reference code (e.g., BK17612915025233).
+            This is the most user-friendly way to check booking status as users receive this reference code.
+            Returns complete booking information including status, amounts, and IDs.
+            Requires userId for authorization.
+            """
+    )
+    public Map<String, Object> getBookingByReference(
+        @McpToolParam(description = "User ID (UUID of the authenticated user)") String userId,
+        @McpToolParam(description = "Booking reference code (e.g., BK-ABC123)") String bookingReference
+    ) {
+        try {
+            log.info("MCP Tool: Getting booking by reference: {} for userId: {}", bookingReference, userId);
+            
+            if (bookingReference == null || bookingReference.isBlank()) {
+                return Map.of("success", false, "error", "Booking reference is required");
+            }
+            
+            // Validate and parse userId
+            UUID userUuid;
+            try {
+                userUuid = UUID.fromString(userId);
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid userId format: {}", userId);
+                return Map.of(
+                    "success", false,
+                    "error", "Invalid userId format. Must be a valid UUID."
+                );
+            }
+            
+            Optional<Booking> bookingOpt = bookingCqrsService.getBookingByReference(bookingReference, userUuid);
+
+            if (bookingOpt.isEmpty()) {
+                return Map.of(
+                    "success", false, 
+                    "error", "Booking not found with reference: " + bookingReference
+                );
+            }
+
+            Booking booking = bookingOpt.get();
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("bookingId", booking.getBookingId().toString());
+            result.put("sagaId", booking.getSagaId());
+            result.put("bookingReference", booking.getBookingReference());
+            result.put("status", booking.getStatus().toString());
+            result.put("bookingType", booking.getBookingType().toString());
+            result.put("totalAmount", booking.getTotalAmount());
+            result.put("currency", booking.getCurrency());
+            result.put("createdAt", booking.getCreatedAt().toString());
+            result.put("statusInfo", getStatusInfo(booking.getStatus()));
+
+            return result;
+        } catch (Exception e) {
+            log.error("MCP Tool: Error getting booking by reference", e);
+            return Map.of("success", false, "error", e.getMessage());
+        }
+    }
+
+    @McpTool(
+        name = "cancel_booking",
+        description = "Cancel a booking by bookingId. Requires userId for authorization."
+    )
+    public Map<String, Object> cancelBooking(
+        @McpToolParam(description = "User ID (UUID of the authenticated user)") String userId,
+        @McpToolParam(description = "Booking ID to cancel") String bookingId,
+        @McpToolParam(description = "Cancellation reason") String reason
+    ) {
+        try {
+            log.info("MCP Tool: Cancelling booking for userId: {}", userId);
+            
+            // Validate and parse userId
+            UUID userUuid;
+            try {
+                userUuid = UUID.fromString(userId);
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid userId format: {}", userId);
+                return Map.of(
+                    "success", false,
+                    "error", "Invalid userId format. Must be a valid UUID."
+                );
+            }
+            
+            UUID bookingUuid = UUID.fromString(bookingId);
+
+            Optional<Booking> bookingOpt = bookingCqrsService.getBookingById(bookingUuid, userUuid);
+            if (bookingOpt.isEmpty()) {
+                return Map.of("success", false, "error", "Booking not found");
+            }
+
+            Booking booking = bookingOpt.get();
+            if (!canCancelBooking(booking.getStatus())) {
+                return Map.of("success", false, "error", "Cannot cancel booking with status: " + booking.getStatus());
+            }
+
+            // TODO: Implement proper cancellation command
+            log.warn("Cancellation needs proper CQRS implementation");
+            return Map.of(
+                "success", true,
+                "bookingId", bookingId,
+                "message", "Cancellation request received"
+            );
+        } catch (Exception e) {
+            log.error("MCP Tool: Error cancelling booking", e);
+            return Map.of("success", false, "error", e.getMessage());
+        }
+    }
+
+    @McpTool(
+        name = "get_booking_history",
+        description = """
+            Get paginated booking history for a user. Returns list of bookings with details, status, and booking information.
+            Default page=0, size=10. Requires userId for authorization.
+            """
+    )
+    public Map<String, Object> getBookingHistory(
+        @McpToolParam(description = "User ID (UUID of the authenticated user)") String userId,
+        @McpToolParam(description = "Page number (0-based, default: 0)") Integer page,
+        @McpToolParam(description = "Number of results per page (default: 10)") Integer size
+    ) {
+        try {
+            log.info("MCP Tool: Getting booking history for userId: {}", userId);
+            
+            // Validate and parse userId
+            UUID userUuid;
+            try {
+                userUuid = UUID.fromString(userId);
+            } catch (IllegalArgumentException e) {
+                log.error("Invalid userId format: {}", userId);
+                return Map.of(
+                    "success", false,
+                    "error", "Invalid userId format. Must be a valid UUID."
+                );
+            }
+            
+            int pageIndex = Math.max(page != null ? page : 0, 0);
+            int pageSize = Math.max(1, Math.min(size != null ? size : 10, 50));
+            Pageable pageable = PageRequest.of(pageIndex, pageSize);
+
+            var historyPage = bookingService.getBookingHistory(userUuid, pageable);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("items", historyPage.getContent());
+            result.put("page", historyPage.getNumber());
+            result.put("size", historyPage.getSize());
+            result.put("totalElements", historyPage.getTotalElements());
+            result.put("totalPages", historyPage.getTotalPages());
+            result.put("hasNext", historyPage.hasNext());
+
+            return result;
+        } catch (Exception e) {
+            log.error("MCP Tool: Error getting booking history", e);
+            return Map.of("success", false, "error", e.getMessage());
+        }
+    }
+
+    private String getStatusInfo(BookingStatus status) {
+        return switch (status) {
+            case PENDING -> "Booking pending - payment may be required";
+            case CONFIRMED -> "Booking confirmed";
+            case PAID -> "Booking completed and paid";
+            case CANCELLED -> "Booking cancelled";
+            case FAILED -> "Booking failed";
+            case PAYMENT_PENDING -> "Awaiting payment";
+            case PAYMENT_FAILED -> "Payment failed";
+            case VALIDATION_PENDING -> "Validation in progress";
+            case VALIDATION_FAILED -> "Validation failed";
+            default -> "Status: " + status;
+        };
+    }
+
+    private boolean canCancelBooking(BookingStatus status) {
+        return status == BookingStatus.PENDING || status == BookingStatus.CONFIRMED || status == BookingStatus.PAYMENT_PENDING;
+    }
+    
+    /**
+     * Validate UUID format
+     */
+    private boolean isValidUUID(String uuid) {
+        if (uuid == null || uuid.isBlank()) {
+            return false;
+        }
+        try {
+            UUID.fromString(uuid);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+}

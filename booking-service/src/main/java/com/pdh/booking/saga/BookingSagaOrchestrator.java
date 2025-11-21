@@ -379,11 +379,12 @@ public class BookingSagaOrchestrator {
     @Transactional
     void onHotelReservationFailed(BookingSagaInstance saga, Booking booking, JsonNode payload) {
         log.warn("Hotel reservation failed for booking {} saga {}", booking.getBookingId(), saga.getSagaId());
+        String failureReason = resolveHotelFailureReason(payload);
         if (hasFlight(booking)) {
-            requestFlightCancellation(saga, booking, payload, "Hotel reservation failed");
+            requestFlightCancellation(saga, booking, payload, failureReason);
         }
         cancelSaga(saga, booking, BookingStatus.VALIDATION_FAILED, "HotelReservationFailed", payload,
-                "Hotel reservation failed");
+                failureReason);
     }
 
     @Transactional
@@ -830,6 +831,48 @@ public class BookingSagaOrchestrator {
         latestBooking.setCancelledAt(ZonedDateTime.now());
         bookingService.releaseReservationLock(latestBooking);
         bookingRepository.save(latestBooking);
+    }
+
+    private String resolveHotelFailureReason(JsonNode payload) {
+        final String defaultReason = "Hotel reservation failed";
+        if (payload == null || payload.isNull()) {
+            return defaultReason;
+        }
+
+        String message = null;
+        JsonNode errorMessageNode = payload.get("errorMessage");
+        if (errorMessageNode != null && !errorMessageNode.isNull()) {
+            message = errorMessageNode.asText();
+        }
+
+        if (StringUtils.isBlank(message)) {
+            JsonNode messageNode = payload.get("message");
+            if (messageNode != null && !messageNode.isNull()) {
+                message = messageNode.asText();
+            }
+        }
+
+        if (StringUtils.isBlank(message)) {
+            JsonNode detailsNode = payload.get("details");
+            if (detailsNode != null && !detailsNode.isNull()) {
+                JsonNode innerMessage = detailsNode.get("message");
+                if (innerMessage != null && !innerMessage.isNull()) {
+                    message = innerMessage.asText();
+                }
+            }
+        }
+
+        if (StringUtils.isBlank(message)) {
+            return defaultReason;
+        }
+
+        String normalized = message.trim();
+        String lower = normalized.toLowerCase();
+        if (lower.contains("inventory not available") || lower.contains("not available for reservation")) {
+            return "Selected hotel room is no longer available. Please choose another option.";
+        }
+
+        return normalized;
     }
 
     private void completeSaga(BookingSagaInstance saga, Booking booking, JsonNode payload) {

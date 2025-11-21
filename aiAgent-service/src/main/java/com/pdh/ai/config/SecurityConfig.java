@@ -66,6 +66,8 @@ public class SecurityConfig{
         var objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
 
         for (Map.Entry<String, McpSseClientProperties.SseParameters> serverParameters : sseProperties.getConnections().entrySet()) {
+
+            
             ServletOAuth2AuthorizedClientExchangeFilterFunction oauth2Client =
                     new ServletOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
             oauth2Client.setDefaultClientRegistrationId("my-client1");
@@ -83,6 +85,7 @@ public class SecurityConfig{
         return sseTransports;
     }
 
+    // OAuth2AuthorizedClientManager bean - needed for OAuth2 client mode
     @Bean
     public OAuth2AuthorizedClientManager authorizedClientManager(
             ClientRegistrationRepository clientRegistrationRepository,
@@ -100,7 +103,8 @@ public class SecurityConfig{
 
         return authorizedClientManager;
     }
-        @Bean
+    
+    @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverterForKeycloak() {
         Converter<Jwt, Collection<GrantedAuthority>> jwtGrantedAuthoritiesConverter = jwt -> {
             Map<String, Collection<String>> realmAccess = jwt.getClaim("realm_access");

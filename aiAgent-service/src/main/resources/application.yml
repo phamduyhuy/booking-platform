@@ -5,6 +5,15 @@ server:
   tomcat:
     max-http-form-post-size: 20MB
     max-swallow-size: 20MB
+    connection-timeout: 600000  # 10 minutes in milliseconds
+    threads:
+      max: 200
+      min-spare: 10
+  # WebSocket configuration for long AI processing
+  websocket:
+    max-idle-timeout: 600000  # 10 minutes
+    max-text-message-buffer-size: 1048576  # 1MB
+    max-binary-message-buffer-size: 1048576  # 1MB
 
   # Vector store configuration for default profile
 
@@ -92,6 +101,17 @@ spring:
     username: postgres
     password: p0stgr3s
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   elasticsearch:
     uris: ${ELASTIC_URIS}
     username: ${ELASTIC_USERNAME}
@@ -143,6 +163,12 @@ spring:
             server2:
               url: http://localhost:8081
               sse-endpoint: /flights/sse
+            customer-server:
+              url: http://localhost:8084
+              sse-endpoint: /customers/sse
+            payment-server:
+              url: http://localhost:8085
+              sse-endpoint: /payments/sse
         stdio:
           connections:
             openweather:
@@ -224,6 +250,17 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: redis
+      port: 6379
+      password:
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   elasticsearch:
     uris: ${ELASTIC_URIS}
   
@@ -287,8 +324,11 @@ spring:
 
         chat:
           options:
-            model: gemini-2.5-flash
-            temperature: 0.0
+            model: gemini-2.5-pro
+            temperature: 0.3
+            use-cached-content: true
+            auto-cache-ttl: 86400  # 1 day in seconds
+
 
 
     mcp:
@@ -309,12 +349,15 @@ spring:
             flight-mcp-server:
               url: http://flight-service
               sse-endpoint: /flights/sse
-            # booking-mcp-server:
-            #   url: http://booking-service
-            #   sse-endpoint: /bookings/sse
-            # payment-mcp-server:
-            #   url: http://payment-service
-            #   sse-endpoint: /payments/sse
+            customer-mcp-server:
+              url: http://customer-service
+              sse-endpoint: /customers/sse
+            booking-mcp-server:
+              url: http://booking-service
+              sse-endpoint: /bookings/sse
+            payment-mcp-server:
+              url: http://payment-service
+              sse-endpoint: /payments/sse
         
         stdio:
           connections:

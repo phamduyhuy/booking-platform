@@ -1,11 +1,17 @@
 package com.pdh.ai.config;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
@@ -16,21 +22,28 @@ public class CacheConfig {
     public static final String EXPLORE_CACHE = "explore";
 
     @Bean
-    public CacheManager cacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
+    public CacheManager cacheManager(
+            RedisConnectionFactory connectionFactory,
+            @Qualifier("cacheObjectMapper") ObjectMapper cacheObjectMapper) {
         
-        // Configure Caffeine cache with specific settings
-        cacheManager.setCaffeine(Caffeine.newBuilder()
-            .initialCapacity(100)           // Initial cache size
-            .maximumSize(1000)              // Maximum number of entries
-            .expireAfterWrite(Duration.ofHours(6))  // Expire after 6 hours of writing
-            .expireAfterAccess(Duration.ofHours(2)) // Expire after 2 hours of no access
-            .recordStats()                  // Enable cache statistics
-        );
+        // Configure Redis cache with 30 days TTL
+        RedisCacheConfiguration cacheConfiguration = RedisCacheConfiguration.defaultCacheConfig()
+            .entryTtl(Duration.ofDays(30))  // TTL 30 days
+            .serializeKeysWith(
+                RedisSerializationContext.SerializationPair.fromSerializer(
+                    new StringRedisSerializer()
+                )
+            )
+            .serializeValuesWith(
+                RedisSerializationContext.SerializationPair.fromSerializer(
+                    new GenericJackson2JsonRedisSerializer(cacheObjectMapper)
+                )
+            )
+            .disableCachingNullValues();  // Don't cache null values
         
-        // Set cache names - only default explore cache
-        cacheManager.setCacheNames(java.util.List.of(EXPLORE_CACHE));
-        
-        return cacheManager;
+        return RedisCacheManager.builder(connectionFactory)
+            .cacheDefaults(cacheConfiguration)
+            .transactionAware()
+            .build();
     }
 }

@@ -329,7 +329,7 @@ const InfoResultsSection = memo(({
     <div className="space-y-3 animate-fadeIn">
       <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
         <Info className="h-4 w-4 text-blue-500" />
-        <span>Thông tin địa điểm ({results.length})</span>
+        <span>Thông tin ({results.length})</span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {results.map((result, index) => {
@@ -666,7 +666,11 @@ function optionalNumber(value: unknown): number | undefined {
 function parsePriceToNumber(value: unknown): number | undefined {
   if (typeof value === 'number') return value
   if (typeof value === 'string') {
-    // Handle Vietnamese price formats like "1.334.933 VND" or "Gia la 1.334.933 VND"
+    // Handle multiple price formats:
+    // - Vietnamese: "1,200,000" or "1.200.000" (comma or period as thousand separator)
+    // - English: "1,200.50" (comma as thousand, period as decimal)
+    // - With currency: "1.334.933 VND" or "Gia la 1.334.933 VND"
+    
     // Extract the numeric part by removing currency symbols and text
     const numericPart = value
       .replace(/[^0-9.,\s]/g, ' ') // Keep only digits, periods, commas, and spaces
@@ -676,10 +680,49 @@ function parsePriceToNumber(value: unknown): number | undefined {
       .find(part => /[0-9]/.test(part)) // Find the part with digits
     
     if (numericPart) {
-      // For Vietnamese format: 1.334.933 (period as thousand separator)
-      const cleaned = numericPart
-        .replace(/\./g, '') // Remove thousand separators (periods)
-        .replace(/,/, '.') // Replace comma with period for decimal
+      // Count separators to determine format
+      const commaCount = (numericPart.match(/,/g) || []).length
+      const periodCount = (numericPart.match(/\./g) || []).length
+      
+      let cleaned: string
+      
+      // If multiple commas OR multiple periods → they're thousand separators
+      if (commaCount > 1) {
+        // Vietnamese format with commas: "1,200,000"
+        cleaned = numericPart.replace(/,/g, '')
+      } else if (periodCount > 1) {
+        // Vietnamese format with periods: "1.200.000"
+        cleaned = numericPart.replace(/\./g, '')
+      } else if (commaCount === 1 && periodCount === 1) {
+        // Mixed format: assume period is decimal, comma is thousand
+        // e.g., "1,200.50" → 1200.50
+        cleaned = numericPart.replace(/,/g, '')
+      } else if (commaCount === 1 && periodCount === 0) {
+        // Only one comma: could be thousand separator OR decimal
+        // Check position: if 2 digits after comma → decimal, else thousand
+        const parts = numericPart.split(',')
+        if (parts[1] && parts[1].length === 2) {
+          // Decimal separator: "1200,50" → 1200.50
+          cleaned = numericPart.replace(/,/, '.')
+        } else {
+          // Thousand separator: "1,200" → 1200
+          cleaned = numericPart.replace(/,/g, '')
+        }
+      } else if (periodCount === 1 && commaCount === 0) {
+        // Only one period: could be thousand separator OR decimal
+        // Check position: if 2 digits after period → decimal, else thousand
+        const parts = numericPart.split('.')
+        if (parts[1] && parts[1].length <= 2) {
+          // Decimal separator: "1200.50" → keep as is
+          cleaned = numericPart
+        } else {
+          // Thousand separator: "1.200" → 1200
+          cleaned = numericPart.replace(/\./g, '')
+        }
+      } else {
+        // No separators, just digits
+        cleaned = numericPart
+      }
       
       const num = parseFloat(cleaned)
       return isNaN(num) ? undefined : num

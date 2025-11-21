@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -76,8 +75,8 @@ public class StorefrontProductDetailsAssembler {
             throw new IllegalStateException("Unable to resolve flight details for selection " + selection.getFlightId());
         }
 
-        LocalDateTime departure = resolveDateTime(fareDetails.getDepartureTime(), selection.getDepartureDateTime());
-        LocalDateTime arrival = resolveDateTime(fareDetails.getArrivalTime(), selection.getArrivalDateTime());
+        String departure = resolveDateTime(fareDetails.getDepartureTime(), selection.getDepartureDateTime());
+        String arrival = resolveDateTime(fareDetails.getArrivalTime(), selection.getArrivalDateTime());
         String seatClass = firstNonBlank(selection.getSeatClass(), fareDetails.getSeatClass());
 
         double pricePerPassenger = resolvePricePerPassenger(selection.getPricePerPassenger(), fareDetails.getPrice());
@@ -241,14 +240,12 @@ public class StorefrontProductDetailsAssembler {
         throw new IllegalArgumentException("Hotel ID is required");
     }
 
-    private LocalDateTime resolveDateTime(String serviceValue, LocalDateTime fallback) {
+    private String resolveDateTime(String serviceValue, String fallback) {
+        // Prefer service value if available
         if (StringUtils.isNotBlank(serviceValue)) {
-            try {
-                return LocalDateTime.parse(serviceValue);
-            } catch (Exception ex) {
-                log.warn("Failed to parse service timestamp {}; falling back to storefront value", serviceValue, ex);
-            }
+            return serviceValue;
         }
+        // Otherwise use storefront-provided value (already in ISO 8601 format)
         return fallback;
     }
 

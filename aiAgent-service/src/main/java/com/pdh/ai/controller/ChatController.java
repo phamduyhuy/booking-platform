@@ -62,40 +62,43 @@ public class ChatController {
      * @param conversationId The conversation ID for this chat
      * @return Complete structured response
      */
-    @PostMapping(path = "/message")
-    public ResponseEntity<StructuredChatPayload> sendMessage(@RequestBody ChatMessageRequest request) {
-        try {
-            // Extract username from OAuth2 principal
-            String username = AuthenticationUtils.extractUsername();
-            String conversationId = request.getConversationId(); // Extract from request body
-            String effectiveConversationId = conversationId != null ? conversationId : generateConversationId();
-            logger.info("💬 [CHAT-MESSAGE] Received message from user: {}, conversation: {}", 
-                       username, effectiveConversationId);
+    
+    // @PostMapping(path = "/message")
+    // public ResponseEntity<StructuredChatPayload> sendMessage(@RequestBody ChatMessageRequest request) {
+    //     try {
+    //         // Extract username and userId from OAuth2 principal
+    //         String username = AuthenticationUtils.extractUsername();
+    //         String userId = AuthenticationUtils.extractUserId();  // UUID from JWT sub claim
+    //         String conversationId = request.getConversationId(); // Extract from request body
+    //         String effectiveConversationId = conversationId != null ? conversationId : generateConversationId();
+    //         logger.info("💬 [CHAT-MESSAGE] Received message from user: {}, userId: {}, conversation: {}", 
+    //                    username, userId, effectiveConversationId);
 
-            // Validate request
-            if (request.getMessage() == null || request.getMessage().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(StructuredChatPayload.builder()
-                    .message("Message cannot be empty")
-                    .results(java.util.List.of())
-                    .build());
-            }
+    //         // Validate request
+    //         if (request.getMessage() == null || request.getMessage().trim().isEmpty()) {
+    //             return ResponseEntity.badRequest().body(StructuredChatPayload.builder()
+    //                 .message("Message cannot be empty")
+    //                 .results(java.util.List.of())
+    //                 .build());
+    //         }
 
-            // Process and return complete response
-            StructuredChatPayload response = llmAiService.processStructured(
-                request.getMessage(),
-                effectiveConversationId,
-                username
-            );
-            return ResponseEntity.ok(response);
+    //         // Process and return complete response
+    //         StructuredChatPayload response = llmAiService.processStructured(
+    //             request.getMessage(),
+    //             effectiveConversationId,
+    //             username,  // Username for conversationKey format
+    //             userId     // UUID for MCP tools
+    //         );
+    //         return ResponseEntity.ok(response);
 
-        } catch (Exception e) {
-            logger.error("❌ [CHAT-MESSAGE] Error processing message: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body(StructuredChatPayload.builder()
-                .message("Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.")
-                .results(java.util.List.of())
-                .build());
-        }
-    }
+    //     } catch (Exception e) {
+    //         logger.error("❌ [CHAT-MESSAGE] Error processing message: {}", e.getMessage(), e);
+    //         return ResponseEntity.status(500).body(StructuredChatPayload.builder()
+    //             .message("Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.")
+    //             .results(java.util.List.of())
+    //             .build());
+    //     }
+    // }
     
     private String generateConversationId() {
         return java.util.UUID.randomUUID().toString();
@@ -116,9 +119,10 @@ public class ChatController {
     @GetMapping("/history/{conversationId}")
     public ResponseEntity<ChatHistoryResponse> getChatHistory(@PathVariable String conversationId) {
         try {
-            // Extract username from OAuth2 principal
+            // Extract username and userId from OAuth2 principal
             String username = AuthenticationUtils.extractUsername();
-            ChatHistoryResponse history = llmAiService.getChatHistory(conversationId, username);
+            String userId = AuthenticationUtils.extractUserId();
+            ChatHistoryResponse history = llmAiService.getChatHistory(conversationId, username, userId);
             return ResponseEntity.ok(history);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(
@@ -144,9 +148,10 @@ public class ChatController {
     @DeleteMapping("/history/{conversationId}")
     public ResponseEntity<Void> clearChatHistory(@PathVariable String conversationId) {
         try {
-            // Extract username from OAuth2 principal
+            // Extract username and userId from OAuth2 principal
             String username = AuthenticationUtils.extractUsername();
-            llmAiService.clearChatHistory(conversationId, username);
+            String userId = AuthenticationUtils.extractUserId();
+            llmAiService.clearChatHistory(conversationId, username, userId);
             return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).build();
@@ -158,9 +163,10 @@ public class ChatController {
     @GetMapping("/conversations")
     public ResponseEntity<List<ChatConversationSummaryDto>> getUserConversations() {
         try {
-            // Extract username from OAuth2 principal
+            // Extract username and userId from OAuth2 principal
             String username = AuthenticationUtils.extractUsername();
-            java.util.List<ChatConversationSummaryDto> conversations = llmAiService.getUserConversations(username);
+            String userId = AuthenticationUtils.extractUserId();
+            java.util.List<ChatConversationSummaryDto> conversations = llmAiService.getUserConversations(username, userId);
             return ResponseEntity.ok(conversations);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(java.util.List.<ChatConversationSummaryDto>of());

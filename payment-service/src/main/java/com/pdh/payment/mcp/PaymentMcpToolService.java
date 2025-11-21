@@ -10,8 +10,8 @@ import com.pdh.payment.repository.PaymentMethodRepository;
 import com.pdh.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -41,7 +41,7 @@ public class PaymentMcpToolService {
      * Get payment methods stored in our database with Stripe payment method IDs
      * AI Agent uses these IDs with the payment MCP tools for secure charging
      */
-    @Tool(
+    @McpTool(
         name = "get_user_stored_payment_methods",
         description = "Get payment methods stored in BookingSmart database. Returns Stripe payment method IDs " +
                 "(pm_xxx) that are required by the payment MCP `process_payment` tool. " +
@@ -50,7 +50,7 @@ public class PaymentMcpToolService {
                 "IMPORTANT: Use the stripePaymentMethodId with process_payment, not our methodId."
     )
     public Map<String, Object> getUserStoredPaymentMethods(
-            @ToolParam(description = "User ID to get payment methods for (UUID format)", required = true)
+            @McpToolParam(description = "User ID to get payment methods for (UUID format)")
             String userId
     ) {
         try {
@@ -266,7 +266,8 @@ public class PaymentMcpToolService {
     /**
      * Process payment via Stripe and record the outcome.
      */
-    @Tool(
+    @McpTool(
+        generateOutputSchema = true,
         name = "process_payment",
         description = "Process a Stripe payment using a stored payment method in BookingSmart. " +
                 "Requires bookingId, userId, amount, currency, and paymentMethodId. " +
@@ -274,25 +275,25 @@ public class PaymentMcpToolService {
                 "the resulting transaction for the booking. Returns transaction details and next steps."
     )
     public Map<String, Object> processPayment(
-            @ToolParam(description = "Booking ID to process payment for (UUID format)", required = true)
+            @McpToolParam(description = "Booking ID to process payment for (UUID format)")
             String bookingId,
             
-            @ToolParam(description = "User ID making the payment (UUID format)", required = true)
+            @McpToolParam(description = "User ID making the payment (UUID format)")
             String userId,
             
-            @ToolParam(description = "Payment amount (decimal number)", required = true)
+            @McpToolParam(description = "Payment amount (decimal number)")
             BigDecimal amount,
             
-            @ToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')", required = true)
+            @McpToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')")
             String currency,
             
-            @ToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.", required = true)
+            @McpToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.")
             String paymentMethodId,
             
-            @ToolParam(description = "Description or reference for the payment", required = false)
+            @McpToolParam(description = "Description or reference for the payment")
             String description,
             
-            @ToolParam(description = "Saga ID from booking creation for correlation", required = false)
+            @McpToolParam(description = "Saga ID from booking creation for correlation")
             String sagaId
     ) {
         return executeStripePayment(bookingId, userId, amount, currency, paymentMethodId, description, sagaId, "process_payment");
@@ -301,30 +302,31 @@ public class PaymentMcpToolService {
     /**
      * Legacy alias retained for backward compatibility. Prefer using process_payment.
      */
-    @Tool(
+    @McpTool(
+        generateOutputSchema = true,
         name = "record_successful_payment",
         description = "Legacy alias for process_payment. Performs the same Stripe charge and recording flow. Prefer using process_payment."
     )
     public Map<String, Object> recordSuccessfulPayment(
-            @ToolParam(description = "Booking ID to process payment for (UUID format)", required = true)
+            @McpToolParam(description = "Booking ID to process payment for (UUID format)")
             String bookingId,
             
-            @ToolParam(description = "User ID making the payment (UUID format)", required = true)
+            @McpToolParam(description = "User ID making the payment (UUID format)")
             String userId,
             
-            @ToolParam(description = "Payment amount (decimal number)", required = true)
+            @McpToolParam(description = "Payment amount (decimal number)")
             BigDecimal amount,
             
-            @ToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')", required = true)
+            @McpToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')")
             String currency,
             
-            @ToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.", required = true)
+            @McpToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.")
             String paymentMethodId,
             
-            @ToolParam(description = "Description or reference for the payment", required = false)
+            @McpToolParam(description = "Description or reference for the payment")
             String description,
             
-            @ToolParam(description = "Saga ID from booking creation for correlation", required = false)
+            @McpToolParam(description = "Saga ID from booking creation for correlation")
             String sagaId
     ) {
         return executeStripePayment(bookingId, userId, amount, currency, paymentMethodId, description, sagaId, "record_successful_payment");
@@ -423,17 +425,18 @@ public class PaymentMcpToolService {
     /**
      * Get payment status and history for a booking
      */
-    @Tool(
+    @McpTool(
+        generateOutputSchema = true,
         name = "get_booking_payment_status",
         description = "Get payment status and transaction history for a booking. " +
                 "Returns all payment attempts, transaction statuses, amounts, and payment methods used. " +
                 "Useful for checking if payment was successful or troubleshooting payment issues."
     )
     public Map<String, Object> getBookingPaymentStatus(
-            @ToolParam(description = "Booking ID to check payment status for (UUID format)", required = true)
+            @McpToolParam(description = "Booking ID to check payment status for (UUID format)")
             String bookingId,
             
-            @ToolParam(description = "User ID who owns the booking (UUID format)", required = true)
+            @McpToolParam(description = "User ID who owns the booking (UUID format)")
             String userId
     ) {
         try {

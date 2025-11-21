@@ -1,32 +1,43 @@
 package com.pdh.ai.agent;
 
 import java.util.List;
+import java.util.Map;
 
 import com.pdh.ai.model.dto.StructuredChatPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pdh.ai.agent.advisor.LoggingAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.StructuredOutputValidationAdvisor;
+import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
+import org.springframework.ai.chat.client.advisor.api.BaseAdvisor;
+import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
-
+import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ExploreAgent {
 
-    private static final Logger logger = LoggerFactory.getLogger(ExploreAgent.class);
+        private static final Logger logger = LoggerFactory.getLogger(ExploreAgent.class);
 
-    private static final String ERROR_MESSAGE = "Xin lỗi, tôi gặp lỗi khi tìm kiếm địa điểm. Vui lòng thử lại.";
+        private static final String ERROR_MESSAGE = "Xin lỗi, tôi gặp lỗi khi tìm kiếm địa điểm. Vui lòng thử lại.";
 
     private static final String EXPLORE_SYSTEM_PROMPT = """
             You are BookingSmart Explore Assistant - a knowledgeable travel curator helping users discover amazing destinations.
+           
+            DO NOT add any text before or after the JSON. Start directly with opening brace, include message, results array, and metadata.
 
             ## Available Tools & Required Workflow
             You have access to these MCP tools - follow this EXACT sequence:
             
             ### Step 1: Get Coordinates (REQUIRED for each destination)
-            - **search_and_geocode_tool**: Search for places and get exact coordinates
+            - **mapbox tools*: Search for places and get exact coordinates
               - Use English place names: "Da Nang", "Ho Chi Minh City", "Hanoi", "Phu Quoc"
               - Returns latitude, longitude, full address
               - ALWAYS use this FIRST to get accurate coordinates for each destination
@@ -40,43 +51,37 @@ public class ExploreAgent {
               - Extract the FIRST valid image URL from results[0].properties.url
               - If no valid image found, use empty string "" for image_url
             
-            ## CRITICAL WORKFLOW RULES
-            1. **For EACH destination you recommend:**
-               a) FIRST: Use search_and_geocode_tool to get coordinates
-               b) SECOND: Use brave_image_search to get image URL
-               c) THEN: Include both coordinates AND image_url in your response
+            ### Step 3: Build Complete Result
+            For each destination, your result object must include:
+            - title: Destination name
+            - description: Brief compelling description (2-3 sentences)
+            - imageUrl: URL from brave_image_search (or empty string if none)
+            - complete metadata object with:
+              * latitude: decimal number (-90 to 90)
+              * longitude: decimal number (-180 to 180)
+              * location: City, Country format
+              * highlights: array of strings (top experiences)
+              * best_time: string (best season/months)
+              * estimated_cost: string with currency
+              * workflow: always "explore_destination"
             
-            2. **NEVER skip image search** - Every destination MUST have an image_url attempt
-            3. **ALWAYS return valid JSON** - the frontend expects this exact format
-            4. **Use English city names** when calling mapbox tools: "Da Nang" not "Đà Nẵng"
-            5. **Suggest 2-3 destinations** per query for quality over quantity
-            6. **Include realistic costs** in local currency or USD
-            7. **Verify all coordinates** are in correct format: latitude (-90 to 90), longitude (-180 to 180)
+            ## MANDATORY RULES
+            1. **ALWAYS return valid JSON** - no markdown, no code blocks, no extra text
+            2. **For EACH destination**: Call mapbox mcp server → brave mcp server → include data
+            3. **NEVER skip image search** - every destination needs imageUrl attempt
+            4. **Use English city names** for mapbox tools: "Da Nang" not "Đà Nẵng"
+            5. **Suggest 2-3 quality destinations** per query
+            6. **Include ALL required metadata fields** for every result
+            7. **Verify coordinates** are valid numbers in correct ranges
             
-            ## Image Search Best Practices for brave_image_search
-            - Use descriptive queries: "[Destination] tourism", "[Destination] travel photo", "[Landmark name] Vietnam"
-            - For Vietnamese destinations, add "Vietnam" to the search: "Da Nang Vietnam tourism"
-            - Always use country="US" parameter for consistent results
-            - Prefer queries that return travel/tourism photos
-            - Tool response format: {"type":"object","items":[{"properties":{"url":"actual-image-url"}}]}
-            - Extract image URL from: results.items[0].properties.url
-            - Validate URLs start with http:// or https://
-            - If brave_image_search returns empty or no valid URLs, use empty string ""
-            
-            
-            ## Example Tool Usage Flow:
-            1. User asks for "trending destinations in Vietnam"
-            2. You identify: Da Nang, Ho Chi Minh City
-            3. For Da Nang:
-               - Call search_and_geocode_tool("Da Nang")
-               - Call brave_image_search(query="Da Nang Vietnam tourism", country="US", count=1) request for each destination resulted from mapbox for onyly 1 image
-               - Extract coordinates from geocode response
-               - Extract image URL from brave search response.items[0].properties.url
-            4. For Ho Chi Minh City:
-               - Call search_and_geocode_tool("Ho Chi Minh City") 
-               - Call brave_image_search(query="Ho Chi Minh City Vietnam travel", country="US", count={based on context})
-               - Extract coordinates and image URL
-            5. Return structured JSON with all data
+            ## EXECUTION CHECKLIST
+            Before returning response, verify:
+            ✓ Called search_and_geocode_tool for each destination
+            ✓ Called brave_image_search for each destination
+            ✓ All results have imageUrl (even if empty string)
+            ✓ All results have complete metadata (latitude, longitude, location, highlights, best_time, estimated_cost, workflow)
+            ✓ Response is valid JSON (no markdown, no extra text)
+            ✓ Message field explains recommendations clearly
             
             ## User Context
             When user provides their current country, use it to:
@@ -85,87 +90,94 @@ public class ExploreAgent {
             - Suggest both domestic and international destinations relevant to their location
             - Mix different categories (beach, city, nature) for diverse recommendations
             
-            ## Key Responsibilities
-            1. **Always use tools in sequence**: geocode → image search → response
-            2. **Quality over quantity**: Better to have 2-3 destinations with complete data
-            3. **Visual appeal**: Every destination MUST have image_url (use brave_image_search)
-            4. **Map integration**: Always provide accurate coordinates
-            5. **Practical information**: Include costs, timing, highlights
-     
-            Always include:
-            - metadata.latitude / metadata.longitude (decimal numbers)
-            - metadata.location (City, Country)
-            - metadata.highlights (array of top experiences)
-            - metadata.best_time (best season or months to visit)
-            - metadata.estimated_cost (approximate daily cost with currency)
-            - metadata.workflow = "explore_destination"
-
-            Remember: NEVER return a destination without using both geocode AND image search tools!
+            Remember: NEVER return plain text. ALWAYS return structured JSON with complete tool-sourced data!
             """;
 
-    private final GoogleGenAiChatModel googleGenAiChatModel;
-    private final ChatClient chatClient;
+        private final GoogleGenAiChatModel googleGenAiChatModel;
+        private final ChatClient chatClient;
+        private final BeanOutputConverter<StructuredChatPayload> beanOutputConverter = new BeanOutputConverter<>(StructuredChatPayload.class);
 
-    public ExploreAgent(
-            ToolCallbackProvider toolCallbackProvider,
-            GoogleGenAiChatModel googleGenAiChatModel
-    ) {
-        this.googleGenAiChatModel = googleGenAiChatModel;
-        
-        LoggingAdvisor loggingAdvisor = new LoggingAdvisor();
-        
-        this.chatClient = ChatClient.builder(googleGenAiChatModel)
-                .defaultSystem(EXPLORE_SYSTEM_PROMPT)
-                .defaultToolCallbacks(toolCallbackProvider)
-                .defaultAdvisors(loggingAdvisor)
-                .build();
-    }
+        public ExploreAgent(
+                        ToolCallbackProvider toolCallbackProvider,
+                        GoogleGenAiChatModel googleGenAiChatModel,
+                        ToolCallingManager toolCallingManager) {
+                this.googleGenAiChatModel = googleGenAiChatModel;
 
+                LoggingAdvisor loggingAdvisor = new LoggingAdvisor();
+                var toolCallAdvisor = ToolCallAdvisor.builder()
+                                .toolCallingManager(toolCallingManager)
+                                
+                                .advisorOrder(BaseAdvisor.HIGHEST_PRECEDENCE + 300)
+                                .build();
+                // StructuredOutputValidationAdvisor: Validates JSON schema and retries on
+                // validation failures
+                // Configure ObjectMapper to ignore null values for optional fields
+                ObjectMapper objectMapper = new ObjectMapper()
+                                .setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
-
-    /**
-     * Synchronous exploration recommendations - returns ExploreResponse directly.
-     * Traditional MVC approach without reactive programming.
-     *
-     * @param query User's exploration query
-     * @param userCountry Optional user's current country
-     * @return StructuredChatPayload with destination-focused recommendations
-     */
-    public StructuredChatPayload explore(String query, String userCountry) {
-        logger.info("🌍 [EXPLORE-AGENT] Starting exploration query: {} (userCountry: {})", 
-                query, userCountry);
-
-        try {
-            // Add user country context to the query if provided
-            String enhancedQuery = query;
-            if (userCountry != null && !userCountry.trim().isEmpty()) {
-                enhancedQuery = String.format("User is from %s. %s", userCountry, query);
-            }
-
-            StructuredChatPayload result = chatClient.prompt()
-                   
-                    .user(enhancedQuery)
-                    .call()
-                    .entity(StructuredChatPayload.class);
-
-            logger.info("✅ [EXPLORE-AGENT] Successfully got structured response: message={}, results={}",
-                    result != null ? result.getMessage() : "null",
-                    result != null && result.getResults() != null ? result.getResults().toString() : 0);
-
-            return result != null ? result : StructuredChatPayload.builder()
-                    .message("Không tìm thấy điểm đến phù hợp.")
-                    .results(List.of())
-                    .build();
-
-        } catch (Exception e) {
-            logger.error("❌ [EXPLORE-AGENT] Error: {}", e.getMessage(), e);
-            return StructuredChatPayload.builder()
-                    .message(ERROR_MESSAGE)
-                    .results(List.of())
-                    .nextRequestSuggestions(new String[]{
-                            "Thử tìm kiếm với ngân sách khác",
-                            "Yêu cầu gợi ý theo mùa hoặc hoạt động cụ thể"})
-                    .build();
+                StructuredOutputValidationAdvisor validationAdvisor = StructuredOutputValidationAdvisor.builder()
+                                .objectMapper(objectMapper)
+                                .outputType(StructuredChatPayload.class)
+                                .maxRepeatAttempts(3)
+                                .advisorOrder(BaseAdvisor.HIGHEST_PRECEDENCE + 1000)
+                                .build();
+                
+                // Get format from BeanOutputConverter
+                String format = this.beanOutputConverter.getFormat();
+                
+                this.chatClient = ChatClient.builder(googleGenAiChatModel)
+                                .defaultSystem(EXPLORE_SYSTEM_PROMPT)
+                                .defaultToolCallbacks(toolCallbackProvider)
+                                .defaultAdvisors(toolCallAdvisor, validationAdvisor, loggingAdvisor)
+                                .build();
         }
-    }
+
+        /**
+         * Synchronous exploration recommendations - returns ExploreResponse directly.
+         * Traditional MVC approach without reactive programming.
+         *
+         * @param query       User's exploration query
+         * @param userCountry Optional user's current country
+         * @return StructuredChatPayload with destination-focused recommendations
+         */
+        public StructuredChatPayload explore(String query, String userCountry) {
+                logger.info("🌍 [EXPLORE-AGENT] Starting exploration query: {} (userCountry: {})",
+                                query, userCountry);
+
+                try {
+                       
+                        
+                        // Add user country context to the query if provided
+                        String enhancedQuery = query;
+                        if (userCountry != null && !userCountry.trim().isEmpty()) {
+                                enhancedQuery = String.format("User is from %s. %s", userCountry, query);
+                        }
+
+                        StructuredChatPayload result = chatClient.prompt()
+                                        .user(enhancedQuery)
+                                        .call()
+                                        .entity(StructuredChatPayload.class);
+
+                        logger.info("✅ [EXPLORE-AGENT] Successfully got structured response: message={}, results={}",
+                                        result != null ? result.getMessage() : "null",
+                                        result != null && result.getResults() != null ? result.getResults().toString()
+                                                        : 0);
+
+                        return result != null ? result
+                                        : StructuredChatPayload.builder()
+                                                        .message("Không tìm thấy điểm đến phù hợp.")
+                                                        .results(List.of())
+                                                        .build();
+
+                } catch (Exception e) {
+                        logger.error("❌ [EXPLORE-AGENT] Error: {}", e.getMessage(), e);
+                        return StructuredChatPayload.builder()
+                                        .message(ERROR_MESSAGE)
+                                        .results(List.of())
+                                        .nextRequestSuggestions(new String[] {
+                                                        "Thử tìm kiếm với ngân sách khác",
+                                                        "Yêu cầu gợi ý theo mùa hoặc hoạt động cụ thể" })
+                                        .build();
+                }
+        }
 }

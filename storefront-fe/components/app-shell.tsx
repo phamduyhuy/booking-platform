@@ -19,8 +19,8 @@ export function AppShell({ children }: AppShellProps) {
       >
         <Sidebar />
       </Suspense>
-      <div className="flex flex-1 min-w-0 h-full">
-        <div className="flex flex-1 min-w-0 h-full">
+      <div className="flex flex-1 min-w-0 min-h-0 h-full">
+        <div className="flex flex-1 min-w-0 min-h-0 h-full">
           {children}
         </div>
       </div>

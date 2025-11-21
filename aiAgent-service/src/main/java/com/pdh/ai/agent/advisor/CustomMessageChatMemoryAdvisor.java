@@ -77,16 +77,11 @@ public final class CustomMessageChatMemoryAdvisor implements BaseChatMemoryAdvis
 	public ChatClientRequest before(ChatClientRequest chatClientRequest, AdvisorChain advisorChain) {
 		String conversationId = getConversationId(chatClientRequest.context(), this.defaultConversationId);
         boolean isAddUserMessage = isAddUserMessage(chatClientRequest.context(), this.isAddUserMessage);
-		//save use original request for after processing
-		// if(chatClientRequest.prompt().getUserMessage() != null && isAddUserMessage){
-		// 	this.chatMemory.add(conversationId, List.of(chatClientRequest.prompt().getUserMessage()));
-		// }
-		// this.chatMemory.add(conversationId, chatClientRequest.prompt().getUserMessage() != null
-		// 		? List.of(chatClientRequest.prompt().getUserMessage())
-		// 		: List.of());
+
 		// 1. Retrieve the chat memory for the current conversation.
-		List<Message> memoryMessages = this.chatMemory.get(conversationId);
-		log.debug("Retrieved {} messages from chat memory for conversationId={}", memoryMessages.size(),
+		// Use getForAgent() to filter USER, ASSISTANT, and TOOL messages for agent context
+		List<Message> memoryMessages = this.chatMemory.getForAgent(conversationId);
+		log.debug("Retrieved {} messages from chat memory for agent context (conversationId={})", memoryMessages.size(),
 				conversationId);
 		// 2. Advise the request messages list.
 		List<Message> processedMessages = new ArrayList<>(memoryMessages);

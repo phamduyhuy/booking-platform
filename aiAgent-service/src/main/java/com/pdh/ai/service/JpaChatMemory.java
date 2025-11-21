@@ -44,9 +44,10 @@ public class JpaChatMemory implements ChatMemory {
 
         for (Message message : messages) {
             MessageType role = mapRole(message);
-            if (role == MessageType.TOOL || role == MessageType.SYSTEM) {
+            if(role == MessageType.SYSTEM) {
                 continue;
             }
+            // Frontend filtering will handle what to display to users
 
             ChatMessage chatMessage = ChatMessage.builder()
                     .conversationId(conversationId)
@@ -92,6 +93,44 @@ public class JpaChatMemory implements ChatMemory {
                 .toList();
     }
 
+    /**
+     * Get messages for agent context - filters USER, ASSISTANT, and TOOL messages only.
+     * SYSTEM messages are excluded as they are typically injected per-request, not from history.
+     * This method is used by ChatMemory Advisor to load conversation context for the agent.
+     * 
+     * @param conversationId the conversation ID
+     * @param lastN maximum number of messages to retrieve (0 = all)
+     * @return filtered list of messages suitable for agent context
+     */
+    @Transactional(readOnly = true)
+    public List<Message> getForAgent(String conversationId, int lastN) {
+        List<ChatMessage> messages;
+        if (lastN > 0) {
+            messages = chatMessageRepository.findByConversationIdOrderByTimestampDesc(conversationId,
+                    PageRequest.of(0, lastN));
+            Collections.reverse(messages);
+        } else {
+            messages = chatMessageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
+        }
+        
+        // Filter: Keep USER, ASSISTANT, and TOOL messages for agent context
+        // Exclude SYSTEM messages (injected per-request, not from history)
+        return messages.stream()
+                .filter(msg -> msg.getRole() == MessageType.USER 
+                            || msg.getRole() == MessageType.ASSISTANT 
+                            || msg.getRole() == MessageType.TOOL)
+                .map(this::toMessage)
+                .toList();
+    }
+
+    /**
+     * Get messages for agent context with default (all messages)
+     */
+    @Transactional(readOnly = true)
+    public List<Message> getForAgent(String conversationId) {
+        return getForAgent(conversationId, 0);
+    }
+
     @Override
     @Transactional
     public void clear(String conversationId) {
@@ -119,7 +158,7 @@ public class JpaChatMemory implements ChatMemory {
             case USER -> new UserMessage(entity.getContent());
             case ASSISTANT -> new AssistantMessage(entity.getContent());
             case SYSTEM -> new SystemMessage(entity.getContent());
-            case TOOL -> new ToolResponseMessage(readToolResponses(entity.getContent()));
+            case TOOL -> ToolResponseMessage.builder().responses(readToolResponses(entity.getContent())).build();
         };
     }
 

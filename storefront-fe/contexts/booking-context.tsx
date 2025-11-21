@@ -406,7 +406,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'SET_STEP', payload: 'confirmation' })
       } else if (failureStatuses.has(statusResponse.status)) {
         enhancedStopStatusPolling()
-        dispatch({ type: 'SET_ERROR', payload: statusResponse.message || 'Booking failed. Please try again.' })
+        const rawMessage = statusResponse.message || 'Booking failed. Please try again.'
+        const lowerMessage = rawMessage.toLowerCase()
+        const userFriendlyMessage = lowerMessage.includes('hotel room') || lowerMessage.includes('hotel reservation')
+          ? 'Phòng khách sạn bạn chọn không còn trống. Vui lòng chọn lựa chọn khác.'
+          : rawMessage
+
+        dispatch({ type: 'SET_ERROR', payload: userFriendlyMessage })
+        toast({
+          title: 'Booking Failed',
+          description: userFriendlyMessage,
+          variant: 'destructive',
+        })
       } else if (pendingStatuses.has(statusResponse.status)) {
         // Check if we should continue polling
         if (statusPollingRef.current) {

@@ -167,6 +167,8 @@ spring:
           completion: false
           resource: false
           tool: true
+
+
   liquibase:
     enabled: true
     default-schema: public
