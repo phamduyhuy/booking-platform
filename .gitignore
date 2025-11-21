@@ -52,4 +52,4 @@ build/
 aiagent
 ### Node.js ###
 node_modules/
-/database_backup/keycloak_db.sql
+database_backup

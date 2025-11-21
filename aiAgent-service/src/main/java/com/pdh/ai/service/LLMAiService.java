@@ -59,8 +59,56 @@ public class LLMAiService implements AiService {
     }
 
     @Override
-    public StructuredChatPayload processStructured(String message, String conversationId, String userId) {
+    public StructuredChatPayload processStructured(String message, String conversationId, String username, String userId) {
         String actualUserId = resolveAuthenticatedUserId(userId);
+<<<<<<< HEAD
+        String actualUsername = resolveAuthenticatedUsername(username);
+        String conversationKey = formatConversationKey(actualUsername, conversationId);
+        Instant now = Instant.now();
+
+        ChatMessage conversationRoot = chatMessageRepository
+                .findFirstByConversationIdAndParentMessageIsNullOrderByTimestampAsc(conversationKey)
+                .orElse(null);
+
+        ChatMessage userMessage = ChatMessage.builder()
+                .conversationId(conversationKey)
+                .role(MessageType.USER)
+                .content(message)
+                .timestamp(now)
+                .build();
+
+        ChatMessage savedUserMessage;
+        if (conversationRoot == null) {
+            userMessage.setTitle(defaultTitle(message));
+            savedUserMessage = chatMessageRepository.save(userMessage);
+            conversationRoot = savedUserMessage;
+        } else {
+            userMessage.setParentMessage(conversationRoot);
+            savedUserMessage = chatMessageRepository.save(userMessage);
+        }
+
+        // Pass userId (UUID) to CoreAgent for MCP tools
+        StructuredChatPayload payload = coreAgent.processSyncStructured(message, conversationKey, actualUserId)
+                .map(this::ensureValidPayload)
+                .doOnError(error -> log.error("[CHAT-MESSAGE] Error processing structured response", error))
+                .onErrorReturn(buildErrorResponse())
+                .block();
+
+        if (payload == null) {
+            payload = buildErrorResponse();
+        }
+
+        persistAssistantMessage(conversationKey, conversationRoot, payload);
+        return payload;
+    }
+
+    @Override
+    public Flux<StructuredChatPayload> streamStructured(String message, String conversationId, String username, String userId) {
+        return Flux.defer(() -> {
+            StructuredChatPayload payload = processStructured(message, conversationId, username, userId);
+            return payload != null ? Flux.just(payload) : Flux.empty();
+        });
+=======
         String conversationKey = formatConversationKey(actualUserId, conversationId);
         try {
             // var agenticScopeResult = assistant.chat(conversationKey, message);
@@ -152,17 +200,22 @@ public class LLMAiService implements AiService {
                     log.error("[AI] Error while streaming structured request", ex);
                     return Flux.just(buildErrorResponse());
                 });
+>>>>>>> origin/dev
     }
 
     @Override
-    public ChatHistoryResponse getChatHistory(String conversationId, String userId) {
-        String actualUserId = resolveAuthenticatedUserId(userId);
-        String conversationKey = formatConversationKey(actualUserId, conversationId);
+    public ChatHistoryResponse getChatHistory(String conversationId, String username, String userId) {
+        // For chat history, we need username for conversationKey format
+        String actualUsername = resolveAuthenticatedUsername(username);
+        String conversationKey = formatConversationKey(actualUsername, conversationId);
 
         List<ChatMessage> storedMessages = chatMessageRepository
                 .findByConversationIdOrderByTimestampAsc(conversationKey);
 
+        // Filter to show only USER and ASSISTANT messages in UI
+        // TOOL and SYSTEM messages are kept in DB for debugging but hidden from users
         List<ChatHistoryResponse.ChatMessage> chatMessages = storedMessages.stream()
+                .filter(entity -> entity.getRole() == MessageType.USER || entity.getRole() == MessageType.ASSISTANT)
                 .map(entity -> ChatHistoryResponse.ChatMessage.builder()
                         .content(entity.getContent())
                         .role(entity.getRole().name().toLowerCase())
@@ -185,25 +238,35 @@ public class LLMAiService implements AiService {
     }
 
     @Override
+<<<<<<< HEAD
+    public void clearChatHistory(String conversationId, String username, String userId) {
+        // For clearing history, we need username for conversationKey format
+        String actualUsername = resolveAuthenticatedUsername(username);
+        String conversationKey = formatConversationKey(actualUsername, conversationId);
+
+        // Simply delete all messages with this conversation key
+=======
     public void clearChatHistory(String conversationId, String userId) {
         String actualUserId = resolveAuthenticatedUserId(userId);
         String conversationKey = formatConversationKey(actualUserId, conversationId);
+>>>>>>> origin/dev
         chatMessageRepository.deleteByConversationId(conversationKey);
     }
 
     @Override
-    public List<ChatConversationSummaryDto> getUserConversations(String userId) {
-        String actualUserId = resolveAuthenticatedUserId(userId);
-        String userIdPrefix = actualUserId + ":";
+    public List<ChatConversationSummaryDto> getUserConversations(String username, String userId) {
+        // For listing conversations, we need username prefix (not userId UUID)
+        String actualUsername = resolveAuthenticatedUsername(username);
+        String usernamePrefix = actualUsername + ":";
 
         List<ChatMessageRepository.ConversationInfo> conversations = chatMessageRepository
-                .findUserConversations(userIdPrefix);
+                .findUserConversations(usernamePrefix);
 
         return conversations.stream().map(conv -> {
             String conversationKey = conv.getConversationId();
             String unprefixedId = conversationKey;
-            if (conversationKey != null && conversationKey.startsWith(userIdPrefix)) {
-                unprefixedId = conversationKey.substring(userIdPrefix.length());
+            if (conversationKey != null && conversationKey.startsWith(usernamePrefix)) {
+                unprefixedId = conversationKey.substring(usernamePrefix.length());
             }
 
             return ChatConversationSummaryDto.builder()
@@ -215,11 +278,32 @@ public class LLMAiService implements AiService {
         }).toList();
     }
 
+<<<<<<< HEAD
+    /**
+     * Validates and resolves the authenticated user ID (UUID from JWT sub claim).
+     * This is used for MCP tool authorization.
+     */
+=======
+>>>>>>> origin/dev
     private String resolveAuthenticatedUserId(String requestUserId) {
         if (requestUserId != null && !requestUserId.isBlank()) {
             return requestUserId;
         }
         throw new IllegalStateException("User must be authenticated to perform this operation. Please log in.");
+    }
+
+    /**
+     * Validates and resolves the authenticated username (from JWT preferred_username claim).
+     * This is used for conversationKey formatting (username:conversationId).
+     */
+    private String resolveAuthenticatedUsername(String requestUsername) {
+        // If a specific username is provided (from auth context), use it
+        if (requestUsername != null && !requestUsername.isBlank()) {
+            return requestUsername;
+        }
+
+        // For WebSocket scenarios, require username to be provided
+        throw new IllegalStateException("Username must be provided for conversation tracking. Please log in.");
     }
 
     private String defaultTitle() {
@@ -236,8 +320,17 @@ public class LLMAiService implements AiService {
         return defaultTitle();
     }
 
+<<<<<<< HEAD
+    /**
+     * Format conversation key as {username}:{conversationId}
+     * Note: Uses username (from JWT preferred_username), NOT userId (UUID from sub)
+     */
+    private String formatConversationKey(String username, String conversationId) {
+        return String.format("%s:%s", username, conversationId);
+=======
     private String formatConversationKey(String userId, String conversationId) {
         return String.format("%s:%s", userId, conversationId);
+>>>>>>> origin/dev
     }
 
     private StructuredChatPayload ensureValidPayload(StructuredChatPayload payload) {

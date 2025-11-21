@@ -48,10 +48,21 @@ public class BookingService {
      */
     @Transactional
     public Booking createBooking(Booking booking) {
-        log.info("Creating booking with reference: {}", booking.getBookingReference());
+        log.info("Creating booking with reference: {} for user: {}", booking.getBookingReference(), booking.getUserId());
 
-        // Set user ID from authentication context
-        booking.setUserId(UUID.fromString(AuthenticationUtils.extractUserId()));
+
+        if (booking.getUserId() == null) {
+            try {
+                String userIdFromToken = AuthenticationUtils.extractUserId();
+                booking.setUserId(UUID.fromString(userIdFromToken));
+                log.debug("Set userId from JWT token: {}", userIdFromToken);
+            } catch (Exception e) {
+                log.warn("Could not extract userId from authentication context: {}. Using null.", e.getMessage());
+            }
+        } else {
+            log.debug("Using pre-set userId: {}", booking.getUserId());
+        }
+        
         booking.setStatus(BookingStatus.PENDING);
 
         DistributedLock reservationLock = null;

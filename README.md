@@ -3,7 +3,7 @@
 Agentic travel booking platform that lets customers search, compare, and confirm flights and hotels through an AI-driven conversational interface. BookingSmart combines domain microservices, Spring Cloud Gateway backends, and Next.js frontends to provide a cohesive end-to-end travel experience for both storefront users and back-office agents.
 
 ## Highlights
-- **Conversational booking** – `aiAgent-service` uses LangChain4j and model adapters to interpret natural-language intents, surface itineraries, and drive multi-step transactions.
+- **Conversational booking** – `aiAgent-service` uses Spring AI and model adapters to interpret natural-language intents, surface itineraries, and drive multi-step transactions.
 - **Modular microservices** – dedicated services handle flights, hotels, bookings, payments, customers, notifications, and media assets, coordinated through Eureka discovery.
 - **Dual BFF gateways** – `storefront-bff` and `backoffice-bff` expose unified APIs, handle OAuth2/Keycloak authentication, and broker calls to downstream services.
 - **Next.js applications** – `storefront-fe` (customer) and `backoffice-fe` (operations) deliver modern UX backed by pnpm tooling and TailwindCSS.
@@ -71,7 +71,7 @@ cd storefront-fe && pnpm install && pnpm dev      # port 3000
 When running UIs standalone, point their environment variables to the relevant BFF URLs (see `next.config.mjs` and `.env.example` files if provided). Use `pnpm build` for production builds and `pnpm lint` before committing.
 
 ## Conversational Agent
-The AI agent (`aiAgent-service`) aggregates customer profile data and live availability by invoking domain services via the storefront/backoffice gateways. It offers REST endpoints (`/api/ai/*`) and WebSocket channels for streaming multi-turn dialogues. LangChain4j enables tool-augmented reasoning, with connectors to external LLM providers configurable through Keycloak-managed secrets. For local experimentation, provide API keys via the compose environment or your IDE run configuration—never commit secrets.
+The AI agent (`aiAgent-service`) aggregates customer profile data and live availability by invoking domain services via the storefront/backoffice gateways. It offers REST endpoints (`/api/ai/*`) and WebSocket channels for streaming multi-turn dialogues. Spring AI enables tool-augmented reasoning, with connectors to external LLM providers configurable through Keycloak-managed secrets. For local experimentation, provide API keys via the compose environment or your IDE run configuration—never commit secrets.
 
 ## Testing & Quality
 - Backend: `./mvnw test` (or `./mvnw test -pl hotel-service`) using JUnit 5, Spring Boot Test, and Testcontainers for Postgres/Keycloak scenarios.

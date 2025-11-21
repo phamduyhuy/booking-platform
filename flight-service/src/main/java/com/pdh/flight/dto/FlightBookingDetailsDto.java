@@ -1,6 +1,5 @@
 package com.pdh.flight.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -9,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -61,18 +59,16 @@ public class FlightBookingDetailsDto {
     private String destinationAirport;
     
     /**
-     * Departure date and time
+     * Departure date and time (ISO 8601 format with timezone, e.g., "2025-11-16T20:45:00+07:00")
      */
     @JsonProperty("departureDateTime")
-    @JsonFormat(shape = JsonFormat.Shape.ARRAY)
-    private LocalDateTime departureDateTime;
+    private String departureDateTime;
     
     /**
-     * Arrival date and time
+     * Arrival date and time (ISO 8601 format with timezone, e.g., "2025-11-16T22:20:00+07:00")
      */
     @JsonProperty("arrivalDateTime")
-    @JsonFormat(shape = JsonFormat.Shape.ARRAY)
-    private LocalDateTime arrivalDateTime;
+    private String arrivalDateTime;
     
     /**
      * Seat class (ECONOMY, BUSINESS, FIRST)
@@ -124,7 +120,6 @@ public class FlightBookingDetailsDto {
         private String firstName;
         private String lastName;
         @JsonProperty("dateOfBirth")
-        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
         private LocalDate dateOfBirth;
         private String title;
         private String email;
@@ -134,7 +129,6 @@ public class FlightBookingDetailsDto {
         @JsonProperty("idNumber")
         private String passportNumber;
         @JsonProperty("passportExpiryDate")
-        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
         private LocalDate passportExpiryDate;
         @JsonProperty("passportIssuingCountry")
         private String passportIssuingCountry;
@@ -160,11 +154,9 @@ public class FlightBookingDetailsDto {
         private String flightId;
         private String flightNumber;
         @JsonProperty("departureDateTime")
-        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
-        private LocalDateTime departureDateTime;
+        private String departureDateTime;
         @JsonProperty("arrivalDateTime")
-        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
-        private LocalDateTime arrivalDateTime;
+        private String arrivalDateTime;
         private String seatClass;
         private List<String> selectedSeats;
         private Double pricePerPassenger;

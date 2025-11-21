@@ -58,6 +58,7 @@ export const ChatInterface = forwardRef<any, ChatInterfaceProps>(function ChatIn
     suggestions,
     getSuggestions,
     conversationId: activeConversationId,
+    handleConfirmation,
   } = useAiChat({
     conversationId: conversationId ?? undefined,
     loadHistoryOnMount: true,
@@ -67,6 +68,17 @@ export const ChatInterface = forwardRef<any, ChatInterfaceProps>(function ChatIn
       console.error('Chat error:', errorMsg);
     }
   })
+
+  // Confirmation handlers
+  const handleConfirm = useCallback((confirmationContext: any) => {
+    console.log('User confirmed:', confirmationContext);
+    handleConfirmation(true, confirmationContext);
+  }, [handleConfirmation]);
+
+  const handleCancel = useCallback(() => {
+    console.log('User cancelled confirmation');
+    handleConfirmation(false);
+  }, [handleConfirmation]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -221,7 +233,7 @@ export const ChatInterface = forwardRef<any, ChatInterfaceProps>(function ChatIn
       </div>
 
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -259,6 +271,8 @@ export const ChatInterface = forwardRef<any, ChatInterfaceProps>(function ChatIn
                       onFlightBook={onFlightBook}
                       onHotelBook={onHotelBook}
                       onLocationClick={onLocationClick}
+                      onConfirm={handleConfirm}
+                      onCancel={handleCancel}
                       canBook={true}
                       isLoading={isCurrentlyStreaming}
                     />

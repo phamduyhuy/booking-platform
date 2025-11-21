@@ -23,11 +23,6 @@ export function SearchInterface() {
 
   // Handle URL parameters for searchTab
   useEffect(() => {
-    const currentTab = searchParams.get("tab")
-    if (currentTab && currentTab !== "search") {
-      return
-    }
-
     const searchTab = searchParams.get("searchTab") as SearchTab
     
     if (searchTab && (searchTab === "flights" || searchTab === "hotels")) {
@@ -37,9 +32,8 @@ export function SearchInterface() {
       setActiveTab("flights")
       // Update URL to include default searchTab
       const params = new URLSearchParams(searchParams.toString())
-      params.set("tab", "search")
       params.set("searchTab", "flights")
-      router.replace(`/?${params.toString()}`, { scroll: false })
+      router.replace(`/search?${params.toString()}`, { scroll: false })
     }
   }, [searchParams, router])
 
@@ -47,10 +41,9 @@ export function SearchInterface() {
     setActiveTab(tab)
     // Update URL without refreshing the page
     const params = new URLSearchParams(searchParams.toString())
-    params.set("tab", "search")
     params.set("searchTab", tab)
     
-    router.replace(`/?${params.toString()}`, { scroll: false })
+    router.replace(`/search?${params.toString()}`, { scroll: false })
   }
 
 

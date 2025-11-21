@@ -61,6 +61,20 @@ spring:
   config:
     activate:
       on-profile: local
+  ai:
+    mcp:
+      server:
+        enabled: true
+        stdio: false
+        name: customer-mcp-server
+        version: 1.0.0
+        type: sync
+        base-url: /customers
+        capabilities:
+          prompt: false
+          completion: false
+          resource: false
+          tool: true
   security:
     oauth2:
       resourceserver:
@@ -84,6 +98,21 @@ spring:
   config:
     activate:
       on-profile: docker
+  ai:
+    mcp:
+      server:
+        enabled: true
+        stdio: false
+        name: customer-mcp-server
+        version: 1.0.0
+        type: sync
+        base-url: /customers
+        capabilities:
+          prompt: false
+          completion: false
+          resource: false
+          tool: true
+
   security:
     oauth2:
       resourceserver:

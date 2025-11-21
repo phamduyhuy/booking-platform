@@ -139,7 +139,7 @@ spring:
       server:
         enabled: true
         stdio: false
-        name: booking-mcp-server
+        name: payments-mcp-server
         version: 1.0.0
         type: sync
         base-url: /payments

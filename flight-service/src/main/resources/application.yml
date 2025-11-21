@@ -162,13 +162,13 @@ spring:
         version: 1.0.0
         type: sync
         base-url: /flights
-        protocol: streamable
         capabilities:
-          resource: false
           prompt: false
           completion: false
-        prompt-change-notification: false
-        resource-change-notification: false
+          resource: false
+          tool: true
+
+
   liquibase:
     enabled: true
     default-schema: public

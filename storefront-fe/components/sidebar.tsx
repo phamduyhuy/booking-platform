@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { MessageCircle, Search, Info, LogOut, UserRound, User, BarChart3, History, CalendarRange } from "lucide-react";
 import Image from "next/image";
@@ -14,6 +14,7 @@ import { BookingModal } from "@/components/booking-modal";
 export function Sidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const {
     user,
     isAuthenticated,
@@ -24,7 +25,6 @@ export function Sidebar() {
     refreshChatConversations,
   } = useAuth();
 
-  const activeTab = (searchParams.get("tab") as "chat" | "search" | null) ?? "chat";
   const activeConversationId = searchParams.get("conversationId");
 
   useEffect(() => {
@@ -37,25 +37,22 @@ export function Sidebar() {
 
   const handleNavigateTab = useCallback(
     (tab: "chat" | "search", options?: { conversationId?: string; newChat?: boolean }) => {
-      const params = new URLSearchParams();
-      params.set("tab", tab);
-
-      if (tab === "search") {
+      if (tab === "chat") {
+        const params = new URLSearchParams();
+        if (options?.conversationId) {
+          params.set("conversationId", options.conversationId);
+        }
+        if (options?.newChat) {
+          params.set("new", "1");
+        }
+        router.push(`/?${params.toString()}`);
+      } else if (tab === "search") {
+        const params = new URLSearchParams();
         const currentSearchTab = searchParams.get("searchTab");
         const searchTab = currentSearchTab === "flights" || currentSearchTab === "hotels" ? currentSearchTab : "flights";
         params.set("searchTab", searchTab);
+        router.push(`/search?${params.toString()}`);
       }
-
-      if (options?.conversationId) {
-        params.set("conversationId", options.conversationId);
-      }
-
-      if (options?.newChat) {
-        params.set("new", "1");
-        params.delete("conversationId");
-      }
-
-      router.push(`/?${params.toString()}`, { scroll: false });
     },
     [router, searchParams],
   );
@@ -85,13 +82,13 @@ export function Sidebar() {
         <Link
           href="/"
           aria-label="BookingSmart Home"
-          className="flex h-10 w-10 items-center justify-center rounded-full overflow-hidden mb-4"
+          className="flex h-full w-full items-center justify-center rounded-full overflow-hidden mb-4"
         >
           <Image
             src="/logo_brand-removebg-preview.png"
             alt="BookingSmart Logo"
-            width={40}
-            height={40}
+            width={300}
+            height={150}
             className="object-contain"
           />
         </Link>
@@ -100,7 +97,7 @@ export function Sidebar() {
       <nav className={cn("flex flex-col gap-2 items-stretch")}> 
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.tab;
+          const isActive = item.tab === "chat" ? pathname === "/" : pathname === "/search";
 
           return (
             <button
@@ -147,7 +144,7 @@ export function Sidebar() {
         {isAuthenticated && chatConversations.length > 0 ? (
           <div className="space-y-1">
             {chatConversations.map((conversation) => {
-              const isConversationActive = activeTab === "chat" && activeConversationId === conversation.id;
+              const isConversationActive = pathname === "/" && activeConversationId === conversation.id;
               return (
                 <button
                   key={conversation.id}

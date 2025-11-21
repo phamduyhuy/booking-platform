@@ -5,10 +5,38 @@ server:
   tomcat:
     max-http-form-post-size: 20MB
     max-swallow-size: 20MB
+<<<<<<< HEAD
+    connection-timeout: 600000  # 10 minutes in milliseconds
+    threads:
+      max: 200
+      min-spare: 10
+  # WebSocket configuration for long AI processing
+  websocket:
+    max-idle-timeout: 600000  # 10 minutes
+    max-text-message-buffer-size: 1048576  # 1MB
+    max-binary-message-buffer-size: 1048576  # 1MB
+
+  # Vector store configuration for default profile
+
+# OpenAPI Documentation Configuration
+#springdoc:
+#  api-docs:
+#    path: /api/docs
+#    enabled: true
+#  swagger-ui:
+#    path: /api/swagger-ui
+#    enabled: true
+#    operationsSorter: method
+#    tagsSorter: alpha
+#    try-it-out-enabled: true
+#  show-actuator: true
+
+=======
 keycloak:
   client-id: ai-agent
   client-secret: ${BOOKING_SMART_AI_CLIENT_SECRET}
   token-uri: ${KEYCLOAK_HOST}/realms/BookingSmart/protocol/openid-connect/token
+>>>>>>> origin/dev
 spring:
   profiles:
     active: local
@@ -72,6 +100,17 @@ spring:
     username: postgres
     password: p0stgr3s
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   elasticsearch:
     uris: ${ELASTIC_URIS}
     username: ${ELASTIC_USERNAME}
@@ -103,7 +142,17 @@ spring:
               sse-endpoint: /hotels/mcp
             server2:
               url: http://localhost:8081
+<<<<<<< HEAD
+              sse-endpoint: /flights/sse
+            customer-server:
+              url: http://localhost:8084
+              sse-endpoint: /customers/sse
+            payment-server:
+              url: http://localhost:8085
+              sse-endpoint: /payments/sse
+=======
               sse-endpoint: /flights/mcp
+>>>>>>> origin/dev
         stdio:
           connections:
             openweather:
@@ -185,6 +234,17 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: redis
+      port: 6379
+      password:
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   elasticsearch:
     uris: ${ELASTIC_URIS}
   
@@ -218,6 +278,46 @@ spring:
             token-uri: ${KEYCLOAK_HOST}/realms/BookingSmart/protocol/openid-connect/token
 
   ai:
+<<<<<<< HEAD
+    retry:
+      exclude-on-http-codes: 429
+      on-client-errors: true
+    model:
+      embedding: ollama
+
+    vectorstore:
+      elasticsearch:
+        dimensions: 768
+        similarity: cosine
+        initialize-schema: true
+
+    ollama:
+      base-url: http://ollama:11434
+      embedding:
+        options:
+          model: nomic-embed-text:latest
+    mistralai:
+      api-key: ${MISTRAL_API_KEY}
+      chat:
+        options:
+
+          model: mistral-medium-2508
+          temperature: 0.0
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY}
+
+        chat:
+          options:
+            model: gemini-2.5-pro
+            temperature: 0.3
+            use-cached-content: true
+            auto-cache-ttl: 86400  # 1 day in seconds
+
+
+
+=======
+>>>>>>> origin/dev
     mcp:
       client:
         enabled: true
@@ -235,6 +335,18 @@ spring:
               sse-endpoint: /hotels/mcp
             flight-mcp-server:
               url: http://flight-service
+<<<<<<< HEAD
+              sse-endpoint: /flights/sse
+            customer-mcp-server:
+              url: http://customer-service
+              sse-endpoint: /customers/sse
+            booking-mcp-server:
+              url: http://booking-service
+              sse-endpoint: /bookings/sse
+            payment-mcp-server:
+              url: http://payment-service
+              sse-endpoint: /payments/sse
+=======
               sse-endpoint: /flights/mcp
             # booking-mcp-server:
             #   url: http://booking-service
@@ -242,6 +354,7 @@ spring:
             # payment-mcp-server:
             #   url: http://payment-service
             #   sse-endpoint: /payments/sse
+>>>>>>> origin/dev
         
         stdio:
           connections:

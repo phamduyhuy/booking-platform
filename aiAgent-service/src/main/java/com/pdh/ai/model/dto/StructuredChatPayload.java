@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Collections;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import dev.langchain4j.model.output.structured.Description;
@@ -22,12 +23,17 @@ public class StructuredChatPayload {
     @Description("Primary natural language response explaining the assistant's current action and guidance.")
     private String message;
 
-    @JsonProperty(required = true, value = "next_request_suggestions")
+    @JsonProperty(required = false, value = "next_request_suggestions")
     @JsonPropertyDescription("Set of suggested user requests for follow-up interactions")
+<<<<<<< HEAD
+    @Builder.Default
+    private String[] nextRequestSuggestions= new String[0];
+=======
     @Description("1-3 concise follow-up prompts the user can pick from. Leave empty when no clear follow up exists.")
     private String[] nextRequestSuggestions;
+>>>>>>> origin/dev
     
-    @JsonProperty(required = true, value = "results")
+    @JsonProperty(required = false, value = "results")
     @JsonPropertyDescription("Array of structured result items like flights, hotels, or information cards")
     @Description("Structured cards representing flights, hotels, itineraries, weather or destination insights relevant to the latest request.")
     @Builder.Default
@@ -39,8 +45,9 @@ public class StructuredChatPayload {
     @Builder.Default
     private Boolean requiresConfirmation = false;
     
-    @JsonProperty(required = false, value = "confirmationContext")
-    @JsonPropertyDescription("Context data needed to execute the operation after user confirms. Contains operation type and pending data.")
+    @JsonProperty(value = "confirmationContext")
+    @JsonPropertyDescription("Optional context data needed to execute the operation after user confirms. Contains operation type and pending data. Can be null when no confirmation is needed.")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private ConfirmationContext confirmationContext;
     
     /**

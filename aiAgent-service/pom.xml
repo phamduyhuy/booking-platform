@@ -27,11 +27,6 @@
             <artifactId>common-lib</artifactId>
             <version>${revision}</version>
             <exclusions>
-
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-data-redis</artifactId>
-                </exclusion>
                 <exclusion>
                     <groupId>org.springframework.kafka</groupId>
                     <artifactId>spring-kafka</artifactId>

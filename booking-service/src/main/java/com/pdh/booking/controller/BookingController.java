@@ -29,8 +29,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springaicommunity.mcp.annotation.McpTool;
-import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -172,12 +170,9 @@ public class BookingController {
             "Public API", "Status Tracking" })
     @SecurityRequirement(name = "oauth2", scopes = { "customer" })
     @GetMapping("/storefront/history")
-    @McpTool(name = "get_booking_history", description = "Get paginated booking history for the current user. Returns list of bookings with details, "
-            +
-            "status, and booking information. Default page=0, size=10.")
     public ResponseEntity<BookingHistoryResponseDto> getBookingHistory(
-            @McpToolParam(description = "Page number (0-based, default: 0)", required = false) @RequestParam(name = "page", defaultValue = "0") int page,
-            @McpToolParam(description = "Number of results per page (default: 10)", required = false) @RequestParam(name = "size", defaultValue = "10") int size) {
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "10") int size) {
         try {
             UUID userId = AuthenticationUtils.getCurrentUserIdFromContext();
 
@@ -233,8 +228,6 @@ public class BookingController {
     /**
      * Create a new booking using CQRS and saga orchestration (Storefront)
      */
-    @McpTool(generateOutputSchema = true, title = "Create booking", description = "Create a new booking from the customer storefront using saga orchestration")
-
     @Operation(summary = "Create booking (Customer)", description = "Create a new booking from the customer storefront using saga orchestration", tags = {
             "Public API", "Booking Creation" })
     @SecurityRequirement(name = "oauth2", scopes = { "customer" })
@@ -242,20 +235,52 @@ public class BookingController {
     @PostMapping("/storefront")
     public ResponseEntity<StorefrontBookingResponseDto> createStorefrontBooking(
             @Parameter(description = "Storefront booking creation request", required = true) 
-            @Valid @RequestBody
-            @McpToolParam(
-                description = "Create a new booking for flights, hotels, or combo packages. Include flightSelection for FLIGHT/COMBO bookings, hotelSelection for HOTEL/COMBO bookings. Total amount must match the sum of selected services."
-
-            ) 
-            StorefrontCreateBookingRequestDto request) {
+            @Valid @RequestBody StorefrontCreateBookingRequestDto request,
+            @Parameter(description = "User ID (optional, for MCP tool calls. If not provided, extracted from JWT token)", required = false)
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
         try {
             log.info("Creating storefront booking with type: {} ", request.getBookingType());
 
+            // Resolve userId: prioritize header (for MCP tools), fallback to JWT token
+            UUID userId;
+            if (userIdHeader != null && !userIdHeader.isBlank()) {
+                try {
+                    userId = UUID.fromString(userIdHeader);
+                    log.debug("Using userId from X-User-Id header: {}", userId);
+                } catch (IllegalArgumentException e) {
+                    log.error("Invalid X-User-Id header format: {}", userIdHeader);
+                    throw new IllegalArgumentException("Invalid userId format in X-User-Id header");
+                }
+            } else {
+                userId = AuthenticationUtils.getCurrentUserIdFromContext();
+                log.debug("Using userId from JWT token: {}", userId);
+            }
+
+            return createBookingInternal(request, userId);
+
+        } catch (Exception e) {
+            log.error("Error creating storefront booking via CQRS: {}", e.getMessage(), e);
+            StorefrontBookingResponseDto errorResponse = StorefrontBookingResponseDto.builder()
+                    .error("An unexpected error occurred: " + e.getMessage())
+                    .errorCode("BOOKING_CREATION_ERROR")
+                    .build();
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    /**
+     * Internal method for creating booking with explicit userId
+     * Used by both REST endpoint and MCP tool service
+     */
+    public ResponseEntity<StorefrontBookingResponseDto> createBookingInternal(
+            StorefrontCreateBookingRequestDto request, 
+            UUID userId) {
+        try {
             Object productDetails = storefrontProductDetailsAssembler.buildProductDetails(request);
             String productDetailsJson = productDetailsService.convertToJson(request.getBookingType(), productDetails);
 
             CreateBookingCommand command = CreateBookingCommand.builder()
-                    .userId(AuthenticationUtils.getCurrentUserIdFromContext())
+                    .userId(userId)
                     .bookingType(request.getBookingType())
                     .totalAmount(BigDecimal.valueOf(request.getTotalAmount()))
                     .currency(request.getCurrency())

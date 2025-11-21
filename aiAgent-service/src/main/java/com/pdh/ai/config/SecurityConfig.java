@@ -39,7 +39,41 @@ public class SecurityConfig{
                 .build();
     }
 
+<<<<<<< HEAD
+    @Bean
+    public List<NamedClientMcpTransport> webFluxClientTransports(McpSseClientProperties sseProperties,
+                                                                 ObjectProvider<WebClient.Builder> webClientBuilderProvider,
+                                                                 ObjectProvider<ObjectMapper> objectMapperProvider,
+                                                                 OAuth2AuthorizedClientManager authorizedClientManager) {
 
+        List<NamedClientMcpTransport> sseTransports = new ArrayList<>();
+
+        var webClientBuilderTemplate = webClientBuilderProvider.getIfAvailable(WebClient::builder);
+        var objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+
+        for (Map.Entry<String, McpSseClientProperties.SseParameters> serverParameters : sseProperties.getConnections().entrySet()) {
+
+            
+            ServletOAuth2AuthorizedClientExchangeFilterFunction oauth2Client =
+                    new ServletOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
+            oauth2Client.setDefaultClientRegistrationId("my-client1");
+
+            var webClientBuilder = webClientBuilderTemplate.clone().baseUrl(serverParameters.getValue().url());
+            String sseEndpoint = serverParameters.getValue().sseEndpoint() != null
+                    ? serverParameters.getValue().sseEndpoint() : "/sse";
+            var transport = WebFluxSseClientTransport.builder(webClientBuilder.apply(oauth2Client.oauth2Configuration()))
+                    .sseEndpoint(sseEndpoint)
+                    .jsonMapper(new JacksonMcpJsonMapper(objectMapper))
+                    .build();
+            sseTransports.add(new NamedClientMcpTransport(serverParameters.getKey(), transport));
+        }
+
+        return sseTransports;
+    }
+=======
+>>>>>>> origin/dev
+
+    // OAuth2AuthorizedClientManager bean - needed for OAuth2 client mode
     @Bean
     public OAuth2AuthorizedClientManager authorizedClientManager(
             ClientRegistrationRepository clientRegistrationRepository,
@@ -57,7 +91,8 @@ public class SecurityConfig{
 
         return authorizedClientManager;
     }
-        @Bean
+    
+    @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverterForKeycloak() {
         Converter<Jwt, Collection<GrantedAuthority>> jwtGrantedAuthoritiesConverter = jwt -> {
             Map<String, Collection<String>> realmAccess = jwt.getClaim("realm_access");

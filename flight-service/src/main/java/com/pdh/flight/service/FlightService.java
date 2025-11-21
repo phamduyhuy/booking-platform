@@ -16,8 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -62,7 +62,7 @@ public class FlightService {
                 outboundRemaining = adjustFlightInventory(
                         flightDetails.getFlightId(),
                         flightDetails.getSeatClass(),
-                        flightDetails.getDepartureDateTime(),
+                        parseIso8601ToLocalDateTime(flightDetails.getDepartureDateTime()),
                         passengerCount,
                         true
                 );
@@ -74,7 +74,7 @@ public class FlightService {
                     returnRemaining = adjustFlightInventory(
                             returnFlight.getFlightId(),
                             returnSeatClass,
-                            returnFlight.getDepartureDateTime(),
+                            parseIso8601ToLocalDateTime(returnFlight.getDepartureDateTime()),
                             passengerCount,
                             true
                     );
@@ -85,9 +85,9 @@ public class FlightService {
             FlightReservationData flightData = FlightReservationData.builder()
                 .flightId(flightDetails.getFlightId())
                 .reservationId("FLT-" + bookingId.toString().substring(0, 8))
-                .departureDate(flightDetails.getDepartureDateTime().format(DateTimeFormatter.ISO_LOCAL_DATE))
+                .departureDate(extractDateFromIso8601(flightDetails.getDepartureDateTime()))
                 .returnDate(flightDetails.getReturnFlight() != null ?
-                    flightDetails.getReturnFlight().getDepartureDateTime().format(DateTimeFormatter.ISO_LOCAL_DATE) : null)
+                    extractDateFromIso8601(flightDetails.getReturnFlight().getDepartureDateTime()) : null)
                 .passengers(flightDetails.getPassengerCount())
                 .seatClass(flightDetails.getSeatClass())
                 .amount(BigDecimal.valueOf(flightDetails.getTotalFlightPrice()))
@@ -119,7 +119,7 @@ public class FlightService {
                 safeReleaseInventory(
                         flightDetails.getReturnFlight().getFlightId(),
                         firstNonNull(flightDetails.getReturnFlight().getSeatClass(), flightDetails.getSeatClass()),
-                        flightDetails.getReturnFlight().getDepartureDateTime(),
+                        parseIso8601ToLocalDateTime(flightDetails.getReturnFlight().getDepartureDateTime()),
                         passengerCount
                 );
             }
@@ -127,7 +127,7 @@ public class FlightService {
                 safeReleaseInventory(
                         flightDetails.getFlightId(),
                         flightDetails.getSeatClass(),
-                        flightDetails.getDepartureDateTime(),
+                        parseIso8601ToLocalDateTime(flightDetails.getDepartureDateTime()),
                         passengerCount
                 );
             }
@@ -165,7 +165,7 @@ public class FlightService {
             safeReleaseInventory(
                     flightDetails.getFlightId(),
                     flightDetails.getSeatClass(),
-                    flightDetails.getDepartureDateTime(),
+                    parseIso8601ToLocalDateTime(flightDetails.getDepartureDateTime()),
                     passengerCount
             );
 
@@ -174,7 +174,7 @@ public class FlightService {
                 safeReleaseInventory(
                         returnFlight.getFlightId(),
                         firstNonNull(returnFlight.getSeatClass(), flightDetails.getSeatClass()),
-                        returnFlight.getDepartureDateTime(),
+                        parseIso8601ToLocalDateTime(returnFlight.getDepartureDateTime()),
                         passengerCount
                 );
             }
@@ -326,5 +326,40 @@ public class FlightService {
 
     private <T> T firstNonNull(T primary, T fallback) {
         return primary != null ? primary : fallback;
+    }
+
+    /**
+     * Parse ISO 8601 datetime string to LocalDateTime
+     * Supports formats: "2025-11-16T20:45:00+07:00", "2025-11-16T20:45:00Z"
+     */
+    private LocalDateTime parseIso8601ToLocalDateTime(String iso8601String) {
+        if (iso8601String == null || iso8601String.isBlank()) {
+            throw new IllegalArgumentException("DateTime string cannot be null or blank");
+        }
+        try {
+            // Parse as OffsetDateTime (handles timezone) then convert to LocalDateTime
+            OffsetDateTime offsetDateTime = OffsetDateTime.parse(iso8601String, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            return offsetDateTime.toLocalDateTime();
+        } catch (Exception ex) {
+            log.error("Failed to parse ISO 8601 datetime: {}", iso8601String, ex);
+            throw new IllegalArgumentException("Invalid ISO 8601 datetime format: " + iso8601String);
+        }
+    }
+
+    /**
+     * Extract date part from ISO 8601 datetime string
+     * Returns format: "YYYY-MM-DD"
+     */
+    private String extractDateFromIso8601(String iso8601String) {
+        if (iso8601String == null || iso8601String.isBlank()) {
+            return null;
+        }
+        try {
+            OffsetDateTime offsetDateTime = OffsetDateTime.parse(iso8601String, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            return offsetDateTime.toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (Exception ex) {
+            log.error("Failed to extract date from ISO 8601 datetime: {}", iso8601String, ex);
+            return null;
+        }
     }
 }

@@ -133,19 +133,23 @@ class AiChatService {
 
     if (this.socket) {
       if (this.socket.readyState === WebSocket.OPEN) {
+        console.log('✅ Reusing existing WebSocket connection');
         return this.socket;
       }
       if (this.socket.readyState === WebSocket.CONNECTING && this.socketReady) {
+        console.log('⏳ Waiting for existing WebSocket connection...');
         return this.socketReady;
       }
     }
 
     const wsUrl = this.getWebSocketUrl();
+    console.log('🔌 Establishing new WebSocket connection to:', wsUrl);
     const socket = new WebSocket(wsUrl);
     this.socket = socket;
 
     this.socketReady = new Promise<WebSocket>((resolve, reject) => {
       const handleOpen = () => {
+        console.log('✅ WebSocket connection established successfully');
         socket.removeEventListener('open', handleOpen);
         socket.removeEventListener('error', handleInitialError);
         socket.addEventListener('message', this.handleSocketMessage);
@@ -155,6 +159,7 @@ class AiChatService {
       };
 
       const handleInitialError = (event: Event) => {
+        console.error('❌ WebSocket connection failed:', event);
         socket.removeEventListener('open', handleOpen);
         socket.removeEventListener('error', handleInitialError);
         this.cleanupSocket();
@@ -228,35 +233,49 @@ class AiChatService {
 
     const requestId = this.generateRequestId();
     const conversationId = options.conversationId ?? this.generateConversationId();
-    const socket = await this.ensureSocket();
-
-    return new Promise<ChatMessageResponse>((resolve, reject) => {
-      const pendingRequest: PendingChatRequest = {
-        requestId,
-        conversationId,
-        resolve,
-        reject,
-        onEvent: options.onEvent,
-      };
-
-      this.currentRequest = pendingRequest;
-
-      const payload = {
-        type: 'prompt',
-        requestId,
-        conversationId,
-        message: trimmed,
-        timestamp: Date.now(),
-      };
-
-      try {
-        socket.send(JSON.stringify(payload));
-      } catch (err: any) {
-        this.currentRequest = null;
-        this.cleanupSocket();
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
+    
+    console.log('📤 Sending message via WebSocket:', {
+      requestId,
+      conversationId,
+      messageLength: trimmed.length
     });
+
+    try {
+      const socket = await this.ensureSocket();
+
+      return new Promise<ChatMessageResponse>((resolve, reject) => {
+        const pendingRequest: PendingChatRequest = {
+          requestId,
+          conversationId,
+          resolve,
+          reject,
+          onEvent: options.onEvent,
+        };
+
+        this.currentRequest = pendingRequest;
+
+        const payload = {
+          type: 'prompt',
+          requestId,
+          conversationId,
+          message: trimmed,
+          timestamp: Date.now(),
+        };
+
+        try {
+          socket.send(JSON.stringify(payload));
+          console.log('✅ WebSocket message sent successfully');
+        } catch (err: any) {
+          console.error('❌ Failed to send WebSocket message:', err);
+          this.currentRequest = null;
+          this.cleanupSocket();
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      });
+    } catch (err) {
+      console.error('❌ WebSocket connection failed, will fallback to REST:', err);
+      throw err;
+    }
   }
 
   async sendPromptRest(

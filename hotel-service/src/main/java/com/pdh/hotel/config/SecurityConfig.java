@@ -30,7 +30,7 @@ public class SecurityConfig {
                 .requestMatchers("/storefront/**").permitAll()
                 .requestMatchers("/backoffice/**").hasAnyRole("ADMIN")
                 .anyRequest().authenticated())
-            .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for testing
+                .csrf(csrf -> csrf.ignoringRequestMatchers( "/mcp/**"))
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
             .build();
     }

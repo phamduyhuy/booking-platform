@@ -1,6 +1,5 @@
 package com.pdh.booking.model.dto.request;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import jakarta.validation.Valid;
@@ -57,18 +56,20 @@ public class StorefrontFlightSelectionRequestDto {
     private String seatClass;
 
     /**
-     * Departure timestamp supplied by client (fallback if remote lookup fails).
+     * Departure timestamp supplied by client (ISO 8601 format with timezone, e.g., "2025-11-16T20:45:00+07:00").
+     * Fallback if remote lookup fails.
      */
     @JsonProperty(required = false, value = "departureDateTime")
-    @JsonPropertyDescription("Departure date and time (fallback if remote lookup fails)")
-    private LocalDateTime departureDateTime;
+    @JsonPropertyDescription("Departure date and time in ISO 8601 format with timezone (e.g., 2025-11-16T20:45:00+07:00)")
+    private String departureDateTime;
 
     /**
-     * Arrival timestamp supplied by client (fallback if remote lookup fails).
+     * Arrival timestamp supplied by client (ISO 8601 format with timezone, e.g., "2025-11-16T22:20:00+07:00").
+     * Fallback if remote lookup fails.
      */
     @JsonProperty(required = false, value = "arrivalDateTime")
-    @JsonPropertyDescription("Arrival date and time (fallback if remote lookup fails)")
-    private LocalDateTime arrivalDateTime;
+    @JsonPropertyDescription("Arrival date and time in ISO 8601 format with timezone (e.g., 2025-11-16T22:20:00+07:00)")
+    private String arrivalDateTime;
 
     /**
      * Number of passengers in the booking.
