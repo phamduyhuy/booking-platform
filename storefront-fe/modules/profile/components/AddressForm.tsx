@@ -9,6 +9,7 @@ import { Edit3, CheckCircle, Clock } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { ProfileService } from "@/lib/profile-service"
 import { UserInfo } from "@/lib/auth-client"
+import { CountrySelector } from "@/components/ui/country-selector"
 
 interface AddressFormProps {
   user: UserInfo
@@ -152,13 +153,11 @@ export function AddressForm({ user, onUpdate }: AddressFormProps) {
           </div>
           <div className="space-y-1">
             <Label htmlFor="address.country">Quốc gia</Label>
-            <Input
-              id="address.country"
+            <CountrySelector
               value={addressInfo.country}
-              onChange={(e) => setAddressInfo((prev) => ({ ...prev, country: e.target.value }))}
+              onValueChange={(value) => setAddressInfo((prev) => ({ ...prev, country: value }))}
               disabled={!isEditing}
               placeholder="Chọn quốc gia của bạn"
-              className="bg-white border-gray-300 disabled:opacity-60"
             />
           </div>
           <div className="space-y-1">

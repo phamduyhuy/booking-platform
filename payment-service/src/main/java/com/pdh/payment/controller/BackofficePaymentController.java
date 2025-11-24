@@ -158,6 +158,31 @@ public class BackofficePaymentController {
     }
 
     /**
+     * Reconcile payment with Stripe
+     */
+    @Operation(summary = "Reconcile payment with Stripe", description = "Check payment status with Stripe and sync if needed")
+    @PostMapping("/payments/{paymentId}/reconcile")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> reconcilePayment(
+            @Parameter(description = "Payment ID", required = true) @PathVariable UUID paymentId) {
+
+        log.info("Reconciling payment: {}", paymentId);
+
+        try {
+            Map<String, Object> reconciliationResult = backofficePaymentService.reconcilePayment(paymentId);
+            return ResponseEntity.ok(ApiResponse.success(reconciliationResult));
+
+        } catch (IllegalArgumentException e) {
+            log.error("Payment not found: {}", paymentId, e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("Payment not found", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error reconciling payment {}", paymentId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to reconcile payment", e.getMessage()));
+        }
+    }
+
+    /**
      * Process manual payment (admin initiated)
      */
     @Operation(summary = "Process manual payment", description = "Process manual payment for admin")
@@ -349,26 +374,6 @@ public class BackofficePaymentController {
         }
     }
 
-    /**
-     * Reconcile payment with gateway
-     */
-    @Operation(summary = "Reconcile payment", description = "Reconcile payment with payment gateway")
-    @PostMapping("/payments/{paymentId}/reconcile")
-    public ResponseEntity<ApiResponse<Payment>> reconcilePayment(
-            @Parameter(description = "Payment ID", required = true) @PathVariable UUID paymentId) {
-
-        log.info("Reconciling payment: {}", paymentId);
-
-        try {
-            Payment payment = backofficePaymentService.reconcilePayment(paymentId);
-            return ResponseEntity.ok(ApiResponse.success(payment));
-
-        } catch (Exception e) {
-            log.error("Error reconciling payment {}", paymentId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to reconcile payment", e.getMessage()));
-        }
-    }
 
     /**
      * Get user payment methods

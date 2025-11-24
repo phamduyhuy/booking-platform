@@ -48,13 +48,14 @@ public class BackofficeHotelService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getAllHotels(int page, int size, String search, String city, String status) {
-        Sort sort = Sort.by(Sort.Direction.DESC, "starRating").and(Sort.by("name"));
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by("name"));
         Pageable pageable = PageRequest.of(page, size, sort);
 
         Page<Hotel> hotelPage;
         if (search != null && !search.isEmpty()) {
             if (city != null && !city.isEmpty()) {
-                hotelPage = hotelRepository.findHotelsByDestinationAndRating(search, BigDecimal.ZERO, BigDecimal.TEN, pageable);
+                hotelPage = hotelRepository.findHotelsByDestinationAndRating(search, BigDecimal.ZERO, BigDecimal.TEN,
+                        pageable);
             } else {
                 hotelPage = hotelRepository.findHotelsByDestination(search, pageable);
             }
@@ -65,8 +66,8 @@ public class BackofficeHotelService {
         }
 
         List<Map<String, Object>> hotels = hotelPage.getContent().stream()
-            .map(this::convertHotelToResponse)
-            .collect(Collectors.toList());
+                .map(this::convertHotelToResponse)
+                .collect(Collectors.toList());
 
         Map<String, Object> response = new HashMap<>();
         response.put("content", hotels);
@@ -82,7 +83,7 @@ public class BackofficeHotelService {
     @Transactional(readOnly = true)
     public Map<String, Object> getHotel(Long id) {
         Hotel hotel = hotelRepository.findById(id)
-            .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + id));
 
         return convertHotelToResponse(hotel);
     }
@@ -104,7 +105,8 @@ public class BackofficeHotelService {
         if (hotelRequestDto.getMedia() != null && !hotelRequestDto.getMedia().isEmpty()) {
             try {
                 imageService.updateHotelImagesWithMediaResponse(savedHotel.getHotelId(), hotelRequestDto.getMedia());
-                log.info("Associated {} media items with hotel ID: {}", hotelRequestDto.getMedia().size(), savedHotel.getHotelId());
+                log.info("Associated {} media items with hotel ID: {}", hotelRequestDto.getMedia().size(),
+                        savedHotel.getHotelId());
             } catch (Exception e) {
                 log.error("Error associating media with hotel {}: {}", savedHotel.getHotelId(), e.getMessage());
             }
@@ -117,7 +119,7 @@ public class BackofficeHotelService {
 
     public Map<String, Object> updateHotel(Long id, HotelRequestDto hotelRequestDto) {
         Hotel hotel = hotelRepository.findById(id)
-            .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + id));
 
         hotel.setName(hotelRequestDto.getName());
         hotel.setAddress(hotelRequestDto.getAddress());
@@ -146,32 +148,32 @@ public class BackofficeHotelService {
 
     public void deleteHotel(Long id) {
         Hotel hotel = hotelRepository.findById(id)
-            .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + id));
         hotel.setIsActive(false);
         hotelRepository.save(hotel);
     }
 
     public Map<String, Object> updateHotelAmenities(Long hotelId, List<Long> amenityIds) {
         Hotel hotel = hotelRepository.findById(hotelId)
-            .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + hotelId));
+                .orElseThrow(() -> new EntityNotFoundException("Hotel not found with ID: " + hotelId));
 
         if (amenityIds == null) {
             amenityIds = Collections.emptyList();
         }
 
         List<Amenity> amenities = amenityIds.isEmpty()
-            ? Collections.emptyList()
-            : amenityRepository.findActiveAmenitiesByIds(amenityIds);
+                ? Collections.emptyList()
+                : amenityRepository.findActiveAmenitiesByIds(amenityIds);
 
         Set<Long> validIds = amenities.stream()
-            .map(Amenity::getAmenityId)
-            .collect(Collectors.toSet());
+                .map(Amenity::getAmenityId)
+                .collect(Collectors.toSet());
 
         hotelAmenityRepository.deleteByHotelId(hotelId);
         if (!validIds.isEmpty()) {
             List<HotelAmenity> mappings = validIds.stream()
-                .map(aid -> new HotelAmenity(hotelId, aid, hotel, null))
-                .collect(Collectors.toList());
+                    .map(aid -> new HotelAmenity(hotelId, aid, hotel, null))
+                    .collect(Collectors.toList());
             hotelAmenityRepository.saveAll(mappings);
         }
 
@@ -201,15 +203,15 @@ public class BackofficeHotelService {
         response.put("roomTypeCount", roomTypes.size());
 
         List<Map<String, Object>> roomTypeSummaries = roomTypes.stream()
-            .map(this::convertRoomTypeSummary)
-            .collect(Collectors.toList());
+                .map(this::convertRoomTypeSummary)
+                .collect(Collectors.toList());
         response.put("roomTypes", roomTypeSummaries);
 
         List<Amenity> amenities = hotelAmenityRepository.findAmenitiesByHotelId(hotel.getHotelId());
         if (amenities != null && !amenities.isEmpty()) {
             List<Map<String, Object>> amenityList = amenities.stream()
-                .map(this::convertAmenityToResponse)
-                .collect(Collectors.toList());
+                    .map(this::convertAmenityToResponse)
+                    .collect(Collectors.toList());
             response.put("amenities", amenityList);
         } else {
             response.put("amenities", Collections.emptyList());
@@ -219,22 +221,21 @@ public class BackofficeHotelService {
         response.put("media", mediaResponses);
 
         List<String> imageUrls = mediaResponses.stream()
-            .sorted((a, b) -> {
-                if (Boolean.TRUE.equals(a.getIsPrimary()) && !Boolean.TRUE.equals(b.getIsPrimary())) {
-                    return -1;
-                }
-                if (!Boolean.TRUE.equals(a.getIsPrimary()) && Boolean.TRUE.equals(b.getIsPrimary())) {
-                    return 1;
-                }
-                return Integer.compare(
-                    a.getDisplayOrder() != null ? a.getDisplayOrder() : 0,
-                    b.getDisplayOrder() != null ? b.getDisplayOrder() : 0
-                );
-            })
-            .map(media -> media.getSecureUrl() != null ? media.getSecureUrl() : media.getUrl())
-            .filter(Objects::nonNull)
-            .filter(url -> !url.isEmpty())
-            .collect(Collectors.toList());
+                .sorted((a, b) -> {
+                    if (Boolean.TRUE.equals(a.getIsPrimary()) && !Boolean.TRUE.equals(b.getIsPrimary())) {
+                        return -1;
+                    }
+                    if (!Boolean.TRUE.equals(a.getIsPrimary()) && Boolean.TRUE.equals(b.getIsPrimary())) {
+                        return 1;
+                    }
+                    return Integer.compare(
+                            a.getDisplayOrder() != null ? a.getDisplayOrder() : 0,
+                            b.getDisplayOrder() != null ? b.getDisplayOrder() : 0);
+                })
+                .map(media -> media.getSecureUrl() != null ? media.getSecureUrl() : media.getUrl())
+                .filter(Objects::nonNull)
+                .filter(url -> !url.isEmpty())
+                .collect(Collectors.toList());
 
         response.put("images", imageUrls);
         response.put("primaryImage", imageUrls.isEmpty() ? null : imageUrls.get(0));
@@ -249,30 +250,30 @@ public class BackofficeHotelService {
 
         LocalDate today = LocalDate.now();
         return roomTypes.stream()
-            .map(RoomType::getRoomTypeId)
-            .filter(Objects::nonNull)
-            .map(roomTypeId -> roomAvailabilityRepository.findByRoomTypeIdAndDate(roomTypeId, today))
-            .map(optional -> optional.orElse(null))
-            .mapToInt(this::remainingInventory)
-            .sum();
+                .map(RoomType::getRoomTypeId)
+                .filter(Objects::nonNull)
+                .map(roomTypeId -> roomAvailabilityRepository.findByRoomTypeIdAndDate(roomTypeId, today))
+                .map(optional -> optional.orElse(null))
+                .mapToInt(this::remainingInventory)
+                .sum();
     }
 
     private double determineMinPrice(List<RoomType> roomTypes) {
         return roomTypes.stream()
-            .map(RoomType::getBasePrice)
-            .filter(Objects::nonNull)
-            .mapToDouble(BigDecimal::doubleValue)
-            .min()
-            .orElse(0.0);
+                .map(RoomType::getBasePrice)
+                .filter(Objects::nonNull)
+                .mapToDouble(BigDecimal::doubleValue)
+                .min()
+                .orElse(0.0);
     }
 
     private Double determineMaxPrice(List<RoomType> roomTypes) {
         return roomTypes.stream()
-            .map(RoomType::getBasePrice)
-            .filter(Objects::nonNull)
-            .map(BigDecimal::doubleValue)
-            .max(Double::compare)
-            .orElse(null);
+                .map(RoomType::getBasePrice)
+                .filter(Objects::nonNull)
+                .map(BigDecimal::doubleValue)
+                .max(Double::compare)
+                .orElse(null);
     }
 
     private int remainingInventory(RoomAvailability availability) {
@@ -337,14 +338,14 @@ public class BackofficeHotelService {
         long totalHotels = hotelRepository.count();
         long activeHotels = hotelRepository.countByIsActive(true);
         long inactiveHotels = hotelRepository.countByIsActive(false);
-        
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalHotels", totalHotels);
         stats.put("activeHotels", activeHotels);
         stats.put("inactiveHotels", inactiveHotels);
         stats.put("totalRoomTypes", roomTypeRepository.count());
         stats.put("totalAmenities", amenityRepository.count());
-        
+
         return stats;
     }
 }

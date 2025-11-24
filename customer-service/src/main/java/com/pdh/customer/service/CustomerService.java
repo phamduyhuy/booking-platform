@@ -10,6 +10,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import org.apache.commons.validator.routines.EmailValidator;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
@@ -21,7 +22,6 @@ import org.keycloak.representations.idm.UserRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
 
 @Service
 public class CustomerService {
@@ -64,8 +64,8 @@ public class CustomerService {
     }
 
     public void updateCustomer(String id, CustomerProfileRequestVm requestVm) {
-        UserRepresentation userRepresentation =
-                keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id).toRepresentation();
+        UserRepresentation userRepresentation = keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id)
+                .toRepresentation();
         if (userRepresentation != null) {
             userRepresentation.setFirstName(requestVm.firstName());
             userRepresentation.setLastName(requestVm.lastName());
@@ -82,17 +82,17 @@ public class CustomerService {
         try {
             RealmResource realmResource = keycloak.realm(keycloakPropsConfig.getRealm());
             UserResource userResource = realmResource.users().get(id);
-            
+
             if (userResource == null) {
                 throw new NotFoundException(Constants.ErrorCode.USER_NOT_FOUND);
             }
-            
+
             // Create new password credential
             CredentialRepresentation newPasswordCredential = createPasswordCredentials(passwordRequestVm.newPassword());
-            
+
             // Update the user's password
             userResource.resetPassword(newPasswordCredential);
-            
+
         } catch (ForbiddenException exception) {
             throw new AccessDeniedException(
                     String.format(ERROR_FORMAT, exception.getMessage(), keycloakPropsConfig.getResource()));
@@ -101,8 +101,8 @@ public class CustomerService {
 
     public void updateCustomerPicture(String id, CustomerPictureRequestVm pictureRequestVm) {
         try {
-            UserRepresentation userRepresentation =
-                    keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id).toRepresentation();
+            UserRepresentation userRepresentation = keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id)
+                    .toRepresentation();
             if (userRepresentation != null) {
                 // Set the picture attribute
                 userRepresentation.singleAttribute("picture", pictureRequestVm.pictureUrl());
@@ -121,27 +121,27 @@ public class CustomerService {
 
     public void updateCustomerAttributes(String id, CustomerAttributesRequestVm attributesRequestVm) {
         try {
-            UserRepresentation userRepresentation =
-                    keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id).toRepresentation();
+            UserRepresentation userRepresentation = keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id)
+                    .toRepresentation();
             if (userRepresentation != null) {
                 // Update all attributes
                 Map<String, String> attributes = attributesRequestVm.attributes();
                 log.info("Updating attributes for user {}: {}", id, attributes);
-                
+
                 for (Map.Entry<String, String> entry : attributes.entrySet()) {
                     String key = entry.getKey();
                     String value = entry.getValue();
 
-                    if (value != null && ( "phone".equalsIgnoreCase(key) || "phone_number".equalsIgnoreCase(key))) {
+                    if (value != null && ("phone".equalsIgnoreCase(key) || "phone_number".equalsIgnoreCase(key))) {
                         value = value.replaceAll("\\s+", "");
                     }
 
                     // Use the attribute name directly (frontend now sends simple names)
                     String keycloakKey = key;
-                    
+
                     log.info("Setting attribute {} = {} (Keycloak key: {})", key, value, keycloakKey);
                     userRepresentation.singleAttribute(keycloakKey, value);
-                   
+
                 }
 
                 // Log the attributes before update
@@ -149,11 +149,11 @@ public class CustomerService {
 
                 RealmResource realmResource = keycloak.realm(keycloakPropsConfig.getRealm());
                 UserResource userResource = realmResource.users().get(id);
-                
+
                 log.info("Updating user representation in Keycloak for user: {}", id);
                 userResource.update(userRepresentation);
                 log.info("Successfully updated user attributes in Keycloak for user: {}", id);
-                
+
                 // Verify the update by reading the user back
                 UserRepresentation updatedUser = userResource.toRepresentation();
                 log.info("UserRepresentation attributes after update: {}", updatedUser.getAttributes());
@@ -170,14 +170,16 @@ public class CustomerService {
         }
     }
 
-    public void updateCustomerSingleAttribute(String id, String attributeName, CustomerSingleAttributeRequestVm attributeRequestVm) {
+    public void updateCustomerSingleAttribute(String id, String attributeName,
+            CustomerSingleAttributeRequestVm attributeRequestVm) {
         try {
-            UserRepresentation userRepresentation =
-                    keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id).toRepresentation();
+            UserRepresentation userRepresentation = keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id)
+                    .toRepresentation();
             if (userRepresentation != null) {
                 // Update single attribute
                 String value = attributeRequestVm.value();
-                if (value != null && ("phone".equalsIgnoreCase(attributeName) || "phone_number".equalsIgnoreCase(attributeName))) {
+                if (value != null && ("phone".equalsIgnoreCase(attributeName)
+                        || "phone_number".equalsIgnoreCase(attributeName))) {
                     value = value.replaceAll("\\s+", "");
                 }
                 userRepresentation.singleAttribute(attributeName, value);
@@ -193,12 +195,14 @@ public class CustomerService {
                     String.format(ERROR_FORMAT, exception.getMessage(), keycloakPropsConfig.getResource()));
         }
     }
-    //make sure revoke the user's access token before deleting the user
-    //if the user is not revoked, the user can still access the system with the old access token
-    //so we need to disable the user first, then delete the user
+
+    // make sure revoke the user's access token before deleting the user
+    // if the user is not revoked, the user can still access the system with the old
+    // access token
+    // so we need to disable the user first, then delete the user
     public void deleteCustomer(String id) {
-        UserRepresentation userRepresentation =
-                keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id).toRepresentation();
+        UserRepresentation userRepresentation = keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id)
+                .toRepresentation();
         if (userRepresentation != null) {
             RealmResource realmResource = keycloak.realm(keycloakPropsConfig.getRealm());
             UserResource userResource = realmResource.users().get(id);
@@ -216,8 +220,8 @@ public class CustomerService {
     public CustomerAdminVm getCustomerByEmail(String email) {
         try {
             if (EmailValidator.getInstance().isValid(email)) {
-                List<UserRepresentation> searchResult =
-                        keycloak.realm(keycloakPropsConfig.getRealm()).users().search(email, true);
+                List<UserRepresentation> searchResult = keycloak.realm(keycloakPropsConfig.getRealm()).users()
+                        .search(email, true);
                 if (searchResult.isEmpty()) {
                     throw new NotFoundException(Constants.ErrorCode.USER_WITH_EMAIL_NOT_FOUND, email);
                 }
@@ -326,12 +330,33 @@ public class CustomerService {
 
     public CustomerAdminVm getCustomerById(String id) {
         try {
-            UserRepresentation userRepresentation =
-                    keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id).toRepresentation();
+            UserRepresentation userRepresentation = keycloak.realm(keycloakPropsConfig.getRealm()).users().get(id)
+                    .toRepresentation();
             if (userRepresentation == null) {
                 throw new NotFoundException(Constants.ErrorCode.USER_NOT_FOUND);
             }
             return CustomerAdminVm.fromUserRepresentation(userRepresentation);
+        } catch (ForbiddenException exception) {
+            throw new AccessDeniedException(
+                    String.format(ERROR_FORMAT, exception.getMessage(), keycloakPropsConfig.getResource()));
+        }
+    }
+
+    public Map<String, Object> getCustomerStatistics() {
+        try {
+            RealmResource realmResource = keycloak.realm(keycloakPropsConfig.getRealm());
+            int totalCustomers = realmResource.users().count();
+
+            // For now, we assume most users are active.
+            // Keycloak API doesn't provide an efficient way to count by enabled status or
+            // creation date without iterating.
+
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("totalCustomers", totalCustomers);
+            stats.put("activeCustomers", totalCustomers);
+            stats.put("newCustomersThisMonth", 0); // Placeholder as we can't easily query this from Keycloak
+
+            return stats;
         } catch (ForbiddenException exception) {
             throw new AccessDeniedException(
                     String.format(ERROR_FORMAT, exception.getMessage(), keycloakPropsConfig.getResource()));

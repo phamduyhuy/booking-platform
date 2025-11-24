@@ -1,141 +1,122 @@
-"use client"
+"use client";
 
-import { useState, useEffect, Suspense, useCallback } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Search, MessageCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { ChatInterface } from "@/components/chat-interface"
-import { SearchInterface } from "@/components/search-interface"
-import { BookingModal } from "@/components/booking-modal"
-import { RecommendPanel } from "@/components/recommend-panel"
-import { useBooking } from "@/contexts/booking-context"
-import { useRecommendPanel } from "@/contexts/recommend-panel-context"
-import HotelDetailsModal from "@/modules/hotel/component/HotelDetailsModal"
-
-type MainTab = "chat" | "search"
+import { useState, useEffect, Suspense, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search, MessageCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ChatInterface } from "@/components/chat-interface";
+import { BookingModal } from "@/components/booking-modal";
+import { RecommendPanel } from "@/components/recommend-panel";
+import { useBooking } from "@/contexts/booking-context";
+import { useRecommendPanel } from "@/contexts/recommend-panel-context";
+import HotelDetailsModal from "@/modules/hotel/component/HotelDetailsModal";
 
 function HomePageContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [activeTab, setActiveTab] = useState<MainTab>("chat")
-  const [conversationId, setConversationId] = useState<string | null>(null)
-  const [newChatSignal, setNewChatSignal] = useState(0)
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
-  const [selectedHotelForDetails, setSelectedHotelForDetails] = useState<{ hotelId: string | null; checkInDate?: string; checkOutDate?: string; guestCount?: number; roomCount?: number }>({ hotelId: null })
-  const { results, setResults: setRecommendResults, clearResults: clearRecommendResults, showLocation } = useRecommendPanel()
-  
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [newChatSignal, setNewChatSignal] = useState(0);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [selectedHotelForDetails, setSelectedHotelForDetails] = useState<{
+    hotelId: string | null;
+    checkInDate?: string;
+    checkOutDate?: string;
+    guestCount?: number;
+    roomCount?: number;
+  }>({ hotelId: null });
   const {
-    resetBooking, 
-    setBookingType, 
-    setSelectedFlight, 
-    setSelectedHotel, 
-    updateBookingData, 
+    results,
+    setResults: setRecommendResults,
+    clearResults: clearRecommendResults,
+    showLocation,
+  } = useRecommendPanel();
+
+  const {
+    resetBooking,
+    setBookingType,
+    setSelectedFlight,
+    setSelectedHotel,
+    updateBookingData,
     setStep,
     resumeBooking,
     selectedFlight,
     selectedHotel,
     setFlightDetails,
     setHotelDetails,
-  } = useBooking()
+  } = useBooking();
 
   // Handle URL parameters
   useEffect(() => {
-    const tab = searchParams.get("tab") as MainTab
-    if (tab && (tab === "chat" || tab === "search")) {
-      setActiveTab(tab)
-    }
-
-    const newChatParam = searchParams.get("new")
+    const newChatParam = searchParams.get("new");
     if (newChatParam === "1") {
-      setNewChatSignal((prev) => prev + 1)
-      setConversationId(null)
-      clearRecommendResults()
+      setNewChatSignal((prev) => prev + 1);
+      setConversationId(null);
+      clearRecommendResults();
 
-      const params = new URLSearchParams(searchParams.toString())
-      params.delete("new")
-      params.delete("conversationId")
-      params.set("tab", "chat")
-      router.replace(`/?${params.toString()}`, { scroll: false })
-      return
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("new");
+      params.delete("conversationId");
+      router.replace(`/?${params.toString()}`, { scroll: false });
+      return;
     }
 
-    const resumeBookingId = searchParams.get("resume")
+    const resumeBookingId = searchParams.get("resume");
     if (resumeBookingId) {
-      const stored = sessionStorage.getItem('bookingResumePayload')
-      const paramsClone = new URLSearchParams(searchParams.toString())
-      paramsClone.delete("resume")
-      router.replace(paramsClone.toString() ? `/?${paramsClone.toString()}` : '/', { scroll: false })
+      const stored = sessionStorage.getItem("bookingResumePayload");
+      const paramsClone = new URLSearchParams(searchParams.toString());
+      paramsClone.delete("resume");
+      router.replace(
+        paramsClone.toString() ? `/?${paramsClone.toString()}` : "/",
+        { scroll: false }
+      );
 
       if (stored) {
         try {
-          const payload = JSON.parse(stored)
+          const payload = JSON.parse(stored);
           void resumeBooking(payload).then(() => {
-            setIsBookingModalOpen(true)
-          })
+            setIsBookingModalOpen(true);
+          });
         } catch (error) {
-          console.error('Failed to resume booking from history', error)
+          console.error("Failed to resume booking from history", error);
         } finally {
-          sessionStorage.removeItem('bookingResumePayload')
+          sessionStorage.removeItem("bookingResumePayload");
         }
       }
-      return
+      return;
     }
 
-    const conversation = searchParams.get("conversationId")
-    setConversationId(conversation)
-  }, [router, searchParams, clearRecommendResults, resumeBooking])
-
-  const handleTabChange = (tab: MainTab) => {
-    setActiveTab(tab)
-    // Update URL without refreshing the page
-    const params = new URLSearchParams()
-    params.set("tab", tab)
-
-    if (tab === "search") {
-      // When switching to search tab, default to flights if no searchTab exists
-      const currentSearchTab = searchParams.get("searchTab")
-      if (!currentSearchTab || (currentSearchTab !== "flights" && currentSearchTab !== "hotels")) {
-        params.set("searchTab", "flights")
-      } else {
-        params.set("searchTab", currentSearchTab)
-      }
-    }
-    if (tab === "chat" && conversationId) {
-      params.set("conversationId", conversationId)
-    }
-    // Don't add searchTab parameter for chat tab
-    
-    router.replace(`/?${params.toString()}`, { scroll: false })
-  }
+    const conversation = searchParams.get("conversationId");
+    setConversationId(conversation);
+  }, [router, searchParams, clearRecommendResults, resumeBooking]);
 
   const handleFlightBook = (flight: any) => {
-    const hasHotelSelected = Boolean(selectedHotel)
-    const currency = flight.currency || 'VND'
+    const hasHotelSelected = Boolean(selectedHotel);
+    const currency = flight.currency || "VND";
 
     if (hasHotelSelected) {
-      setBookingType('both')
-      setFlightDetails(null)
+      setBookingType("both");
+      setFlightDetails(null);
       updateBookingData({
-        bookingType: 'COMBO',
+        bookingType: "COMBO",
         totalAmount: 0,
         currency,
         flightSelection: undefined,
-      })
+      });
     } else {
-      resetBooking()
-      setBookingType('flight')
-      setFlightDetails(null)
+      resetBooking();
+      setBookingType("flight");
+      setFlightDetails(null);
       updateBookingData({
-        bookingType: 'FLIGHT',
+        bookingType: "FLIGHT",
         totalAmount: 0,
         currency,
         flightSelection: undefined,
         hotelSelection: undefined,
         comboDiscount: undefined,
-      })
+      });
     }
 
-    console.log('✈️ Booking flight:', flight)
+    console.log("✈️ Booking flight:", flight);
     setSelectedFlight({
       flightId: flight.flightId || flight.id,
       flightNumber: flight.flightNumber,
@@ -144,25 +125,31 @@ function HomePageContent() {
       destination: flight.destination,
       originLatitude: flight.originLatitude ?? flight.raw?.originLatitude,
       originLongitude: flight.originLongitude ?? flight.raw?.originLongitude,
-      destinationLatitude: flight.destinationLatitude ?? flight.raw?.destinationLatitude,
-      destinationLongitude: flight.destinationLongitude ?? flight.raw?.destinationLongitude,
-      departureTime: flight.departureTime ?? flight.raw?.departureTime ?? flight.raw?.departure ?? null,
+      destinationLatitude:
+        flight.destinationLatitude ?? flight.raw?.destinationLatitude,
+      destinationLongitude:
+        flight.destinationLongitude ?? flight.raw?.destinationLongitude,
+      departureTime:
+        flight.departureTime ??
+        flight.raw?.departureTime ??
+        flight.raw?.departure ??
+        null,
       arrivalTime: flight.arrivalTime,
       duration: flight.duration,
       price: flight.price,
       currency,
       seatClass: flight.seatClass,
-      logo: flight.logo?? flight.raw?.airlineLogo ?? flight.imageUrl ?? null,
+      logo: flight.logo ?? flight.raw?.airlineLogo ?? flight.imageUrl ?? null,
       scheduleId: flight.scheduleId,
       fareId: flight.fareId,
-    })
-    
+    });
+
     // Set step to passengers
-    setStep('passengers')
-    
+    setStep("passengers");
+
     // Open booking modal
-    setIsBookingModalOpen(true)
-  }
+    setIsBookingModalOpen(true);
+  };
 
   const handleHotelBook = (hotel: any, room?: any) => {
     if (!room) {
@@ -171,45 +158,47 @@ function HomePageContent() {
         checkInDate: hotel.checkInDate,
         checkOutDate: hotel.checkOutDate,
         guestCount: hotel.guests,
-        roomCount: hotel.rooms
-      })
-      return
+        roomCount: hotel.rooms,
+      });
+      return;
     }
 
-    const hasFlightSelected = Boolean(selectedFlight)
-    const currency = hotel.currency || 'VND'
+    const hasFlightSelected = Boolean(selectedFlight);
+    const currency = hotel.currency || "VND";
 
     if (hasFlightSelected) {
-      setBookingType('both')
-      setHotelDetails(null)
+      setBookingType("both");
+      setHotelDetails(null);
       updateBookingData({
-        bookingType: 'COMBO',
+        bookingType: "COMBO",
         totalAmount: 0,
         currency,
         hotelSelection: undefined,
-      })
+      });
     } else {
-      resetBooking()
-      setBookingType('hotel')
-      setHotelDetails(null)
+      resetBooking();
+      setBookingType("hotel");
+      setHotelDetails(null);
       updateBookingData({
-        bookingType: 'HOTEL',
+        bookingType: "HOTEL",
         totalAmount: 0,
         currency,
         flightSelection: undefined,
         hotelSelection: undefined,
         comboDiscount: undefined,
-      })
+      });
     }
-    
+
     setSelectedHotel({
       id: selectedHotelForDetails.hotelId || hotel.id || hotel.hotelId,
       name: hotel.name,
       address: hotel.address,
       city: hotel.city,
       country: hotel.country,
-      hotelLatitude: hotel.hotelLatitude ?? hotel.latitude ?? hotel.location?.latitude,
-      hotelLongitude: hotel.hotelLongitude ?? hotel.longitude ?? hotel.location?.longitude,
+      hotelLatitude:
+        hotel.hotelLatitude ?? hotel.latitude ?? hotel.location?.latitude,
+      hotelLongitude:
+        hotel.hotelLongitude ?? hotel.longitude ?? hotel.location?.longitude,
       rating: hotel.rating,
       roomType: room.type,
       roomName: room.name,
@@ -224,80 +213,54 @@ function HomePageContent() {
       guests: hotel.guests,
       rooms: hotel.rooms,
       nights: hotel.nights,
-    })
+    });
 
-    setStep('passengers')
-    setIsBookingModalOpen(true)
-  }
+    setStep("passengers");
+    setIsBookingModalOpen(true);
+  };
 
-  const handleLocationClick = useCallback((location: { 
-    lat: number; 
-    lng: number; 
-    title: string; 
-    description?: string 
-  }) => {
-    console.log('📍 Location clicked:', location)
-    showLocation(location)
-  }, [showLocation])
+  const handleLocationClick = useCallback(
+    (location: {
+      lat: number;
+      lng: number;
+      title: string;
+      description?: string;
+    }) => {
+      console.log("📍 Location clicked:", location);
+      showLocation(location);
+    },
+    [showLocation]
+  );
 
-  const handleSearchResults = useCallback((results: any[], type: string) => {
-    console.log('🔍 Search results:', results, type)
-    setRecommendResults(Array.isArray(results) ? results : [])
-  }, [setRecommendResults])
+  const handleSearchResults = useCallback(
+    (results: any[], type: string) => {
+      console.log("🔍 Search results:", results, type);
+      setRecommendResults(Array.isArray(results) ? results : []);
+    },
+    [setRecommendResults]
+  );
 
   const handleConversationChange = useCallback((id: string | null) => {
-    setConversationId(id)
-  }, [])
-
-  const tabs = [
-    { id: "chat" as const, label: "Chat", icon: MessageCircle },
-    { id: "search" as const, label: "Search", icon: Search },
-  ]
+    setConversationId(id);
+  }, []);
 
   return (
     <>
       <div className="flex flex-1 min-h-0 min-w-0 h-full">
-        <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-          {/* Main Tab Navigation */}
-          <div className="flex items-center justify-center p-4 border-b border-border shrink-0">
-            <div className="flex bg-muted rounded-full p-1">
-              {tabs.map((tab) => {
-                const Icon = tab.icon
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-4 md:px-6 py-2 rounded-full text-sm font-medium transition-all duration-200",
-                      activeTab === tab.id
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="hidden sm:inline">{tab.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
+        <main className="flex-1 flex flex-col h-full min-w-0 min-h-0 overflow-hidden">
           {/* Tab Content */}
-          <div className="flex-1 overflow-hidden">
-            {activeTab === "chat" && (
-              <ChatInterface
-                onSearchResults={handleSearchResults}
-                onStartBooking={() => {}}
-                onChatStart={() => {}}
-                conversationId={conversationId}
-                onConversationChange={handleConversationChange}
-                newChatTrigger={newChatSignal}
-                onFlightBook={handleFlightBook}
-                onHotelBook={handleHotelBook}
-                onLocationClick={handleLocationClick}
-              />
-            )}
-            {activeTab === "search" && <SearchInterface />}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ChatInterface
+              onSearchResults={handleSearchResults}
+              onStartBooking={() => {}}
+              onChatStart={() => {}}
+              conversationId={conversationId}
+              onConversationChange={handleConversationChange}
+              newChatTrigger={newChatSignal}
+              onFlightBook={handleFlightBook}
+              onHotelBook={handleHotelBook}
+              onLocationClick={handleLocationClick}
+            />
           </div>
         </main>
         <aside className="hidden md:flex h-full border-l border-border flex-col overflow-hidden shrink-0 bg-background md:w-[320px]">
@@ -306,8 +269,8 @@ function HomePageContent() {
       </div>
 
       {/* Booking Modal */}
-      <BookingModal 
-        open={isBookingModalOpen} 
+      <BookingModal
+        open={isBookingModalOpen}
         onOpenChange={setIsBookingModalOpen}
       />
 
@@ -318,7 +281,7 @@ function HomePageContent() {
         onClose={() => setSelectedHotelForDetails({ hotelId: null })}
         onBookRoom={(payload) => {
           // Handle booking room from hotel details modal
-          handleHotelBook(payload.hotel, payload.room)
+          handleHotelBook(payload.hotel, payload.room);
         }}
         checkInDate={selectedHotelForDetails.checkInDate}
         checkOutDate={selectedHotelForDetails.checkOutDate}
@@ -327,12 +290,12 @@ function HomePageContent() {
         canBook={true}
       />
     </>
-  )
+  );
 }
 
 export default function HomePage() {
   return (
-    <Suspense 
+    <Suspense
       fallback={
         <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
           Loading...
@@ -341,5 +304,5 @@ export default function HomePage() {
     >
       <HomePageContent />
     </Suspense>
-  )
+  );
 }

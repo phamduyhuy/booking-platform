@@ -35,12 +35,12 @@ public class BackofficeAircraftService {
      * Get all aircraft with pagination and filtering for backoffice
      */
     public Map<String, Object> getAllAircraft(int page, int size, String search) {
-        log.info("Fetching aircraft for backoffice with search: {}, page: {}, size: {}", 
+        log.info("Fetching aircraft for backoffice with search: {}, page: {}, size: {}",
                 search, page, size);
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("model").ascending());
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Aircraft> aircraftPage;
-        
+
         if (StringUtils.hasText(search)) {
             aircraftPage = aircraftRepository.findActiveByModelContainingIgnoreCase(search, pageable);
         } else {
@@ -66,10 +66,10 @@ public class BackofficeAircraftService {
      */
     public AircraftDto getAircraft(Long id) {
         log.info("Fetching aircraft details for backoffice: ID={}", id);
-        
+
         Aircraft aircraft = aircraftRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Aircraft not found with ID: " + id));
-        
+
         return aircraftMapper.toDtoWithMedia(aircraft);
     }
 
@@ -81,21 +81,22 @@ public class BackofficeAircraftService {
         log.info("Creating new aircraft: {}", aircraftRequestDto.getModel());
 
         // Validate registration number uniqueness
-        if (StringUtils.hasText(aircraftRequestDto.getRegistrationNumber()) && 
-            aircraftRepository.existsByRegistrationNumberIgnoreCase(aircraftRequestDto.getRegistrationNumber())) {
-            throw new IllegalArgumentException("Registration number already exists: " + aircraftRequestDto.getRegistrationNumber());
+        if (StringUtils.hasText(aircraftRequestDto.getRegistrationNumber()) &&
+                aircraftRepository.existsByRegistrationNumberIgnoreCase(aircraftRequestDto.getRegistrationNumber())) {
+            throw new IllegalArgumentException(
+                    "Registration number already exists: " + aircraftRequestDto.getRegistrationNumber());
         }
 
         Aircraft aircraft = aircraftMapper.toEntity(aircraftRequestDto);
         aircraft = aircraftRepository.save(aircraft);
-        
+
         // Set featured media URL if provided
         if (aircraftRequestDto.getFeaturedMediaUrl() != null && !aircraftRequestDto.getFeaturedMediaUrl().isEmpty()) {
             aircraft.setFeaturedMediaUrl(aircraftRequestDto.getFeaturedMediaUrl());
             aircraft = aircraftRepository.save(aircraft); // Save the updated aircraft with featured media URL
             log.info("Set featured media URL for aircraft ID: {}", aircraft.getAircraftId());
         }
-        
+
         log.info("Aircraft created with ID: {}", aircraft.getAircraftId());
         return aircraftMapper.toDtoWithMedia(aircraft);
     }
@@ -113,8 +114,8 @@ public class BackofficeAircraftService {
         // Check if registration number is unique (exclude current aircraft)
         if (StringUtils.hasText(aircraftRequestDto.getRegistrationNumber())) {
             String upperRegNumber = aircraftRequestDto.getRegistrationNumber().toUpperCase();
-            if (!upperRegNumber.equals(existingAircraft.getRegistrationNumber()) && 
-                aircraftRepository.existsByRegistrationNumberIgnoreCase(upperRegNumber)) {
+            if (!upperRegNumber.equals(existingAircraft.getRegistrationNumber()) &&
+                    aircraftRepository.existsByRegistrationNumberIgnoreCase(upperRegNumber)) {
                 throw new IllegalArgumentException("Registration number already exists: " + upperRegNumber);
             }
         }
@@ -125,7 +126,8 @@ public class BackofficeAircraftService {
         // Update featured media URL if provided
         if (aircraftRequestDto.getFeaturedMediaUrl() != null) {
             updatedAircraft.setFeaturedMediaUrl(aircraftRequestDto.getFeaturedMediaUrl());
-            updatedAircraft = aircraftRepository.save(updatedAircraft); // Save the updated aircraft with featured media URL
+            updatedAircraft = aircraftRepository.save(updatedAircraft); // Save the updated aircraft with featured media
+                                                                        // URL
             log.info("Updated featured media URL for aircraft ID: {}", updatedAircraft.getAircraftId());
         }
 
@@ -145,7 +147,7 @@ public class BackofficeAircraftService {
 
         aircraft.setIsActive(false);
         aircraftRepository.save(aircraft);
-        
+
         log.info("Aircraft deleted with ID: {}", id);
     }
 
@@ -154,13 +156,13 @@ public class BackofficeAircraftService {
      */
     public List<Map<String, Object>> searchAircraft(String query) {
         log.info("Searching aircraft for autocomplete: query={}", query);
-        
+
         if (!StringUtils.hasText(query) || query.trim().length() < 2) {
             return new ArrayList<>();
         }
 
         List<Aircraft> aircrafts = aircraftRepository.findActiveByModelContainingIgnoreCase(query);
-        
+
         return aircrafts.stream()
                 .limit(10)
                 .map(aircraft -> {
@@ -182,11 +184,11 @@ public class BackofficeAircraftService {
 
         long totalAircraft = aircraftRepository.count();
         long activeAircraft = aircraftRepository.findAllActive().size();
-        
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalAircraft", totalAircraft);
         stats.put("activeAircraft", activeAircraft);
-        
+
         return stats;
     }
 }

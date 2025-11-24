@@ -44,14 +44,15 @@ public class BackofficeBookingController {
             @RequestParam(required = false) BookingStatus status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        
-        log.info("Fetching bookings - page: {}, size: {}, type: {}, status: {}, startDate: {}, endDate: {}", 
+
+        log.info("Fetching bookings - page: {}, size: {}, type: {}, status: {}, startDate: {}, endDate: {}",
                 page, size, bookingType, status, startDate, endDate);
-        
-        Pageable pageable = PageRequest.of(page, size);
+
+        Pageable pageable = PageRequest.of(page, size, org.springframework.data.domain.Sort
+                .by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
         Page<Booking> bookings = backofficeBookingService.getAllBookings(
                 pageable, bookingType, status, startDate, endDate);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -63,12 +64,12 @@ public class BackofficeBookingController {
             @RequestParam String airline,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Searching flight bookings by airline: {}", airline);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.getFlightBookingsByAirline(airline, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -81,13 +82,13 @@ public class BackofficeBookingController {
             @RequestParam String arrivalAirport,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Searching flight bookings by route: {} -> {}", departureAirport, arrivalAirport);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.getFlightBookingsByRoute(
                 departureAirport, arrivalAirport, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -100,13 +101,13 @@ public class BackofficeBookingController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Searching flight bookings by departure date: {} to {}", startDate, endDate);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.getFlightBookingsByDepartureDate(
                 startDate, endDate, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -118,12 +119,12 @@ public class BackofficeBookingController {
             @RequestParam String hotelName,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Searching hotel bookings by hotel name: {}", hotelName);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.getHotelBookingsByHotelName(hotelName, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -135,12 +136,12 @@ public class BackofficeBookingController {
             @RequestParam String city,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Searching hotel bookings by location: {}", city);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.getHotelBookingsByLocation(city, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -153,13 +154,13 @@ public class BackofficeBookingController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Searching hotel bookings by check-in date: {} to {}", startDate, endDate);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.getHotelBookingsByCheckInDate(
                 startDate, endDate, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -170,11 +171,11 @@ public class BackofficeBookingController {
     public ResponseEntity<Map<String, Object>> getBookingStatistics(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        
+
         log.info("Fetching booking statistics for period: {} to {}", startDate, endDate);
-        
+
         Map<String, Object> statistics = backofficeBookingService.getBookingStatistics(startDate, endDate);
-        
+
         return ResponseEntity.ok(statistics);
     }
 
@@ -184,9 +185,9 @@ public class BackofficeBookingController {
     @GetMapping("/{bookingId}")
     public ResponseEntity<Booking> getBookingById(@PathVariable UUID bookingId) {
         log.info("Fetching booking details for ID: {}", bookingId);
-        
+
         Booking booking = backofficeBookingService.getBookingById(bookingId);
-        
+
         return ResponseEntity.ok(booking);
     }
 
@@ -198,12 +199,12 @@ public class BackofficeBookingController {
             @PathVariable UUID customerId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Fetching bookings for customer: {}", customerId);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.getBookingsByCustomerId(customerId, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -215,12 +216,12 @@ public class BackofficeBookingController {
             @RequestBody Map<String, Object> searchCriteria,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Performing advanced search with criteria: {}", searchCriteria);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.advancedSearch(searchCriteria, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
@@ -231,12 +232,12 @@ public class BackofficeBookingController {
     public ResponseEntity<Map<String, List<Map<String, Object>>>> getPopularDestinations(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        
+
         log.info("Fetching popular destinations for period: {} to {}", startDate, endDate);
-        
+
         Map<String, List<Map<String, Object>>> destinations = backofficeBookingService
                 .getPopularDestinations(startDate, endDate);
-        
+
         return ResponseEntity.ok(destinations);
     }
 
@@ -248,97 +249,85 @@ public class BackofficeBookingController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) String groupBy) {
-        
-        log.info("Fetching revenue analytics for period: {} to {}, grouped by: {}", 
+
+        log.info("Fetching revenue analytics for period: {} to {}, grouped by: {}",
                 startDate, endDate, groupBy);
-        
+
         Map<String, Object> analytics = backofficeBookingService.getRevenueAnalytics(
                 startDate, endDate, groupBy);
-        
+
         return ResponseEntity.ok(analytics);
     }
 
     /**
      * Update booking status (Admin only)
      */
-    @Operation(summary = "Update booking status", 
-               description = "Update booking status with reason (Admin only)")
+    @Operation(summary = "Update booking status", description = "Update booking status with reason (Admin only)")
     @Tag(name = "Admin Booking Management")
     @PutMapping("/{bookingId}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Booking> updateBookingStatus(
-            @Parameter(description = "Booking ID", required = true)
-            @PathVariable UUID bookingId,
-            @Parameter(description = "New status", required = true)
-            @RequestParam BookingStatus status,
-            @Parameter(description = "Reason for status change")
-            @RequestParam(required = false) String reason) {
-        
-        log.info("Admin updating booking {} status to {} with reason: {}", 
+            @Parameter(description = "Booking ID", required = true) @PathVariable UUID bookingId,
+            @Parameter(description = "New status", required = true) @RequestParam BookingStatus status,
+            @Parameter(description = "Reason for status change") @RequestParam(required = false) String reason) {
+
+        log.info("Admin updating booking {} status to {} with reason: {}",
                 bookingId, status, reason);
-        
+
         Booking updatedBooking = backofficeBookingService.updateBookingStatus(
                 bookingId, status, reason);
-        
+
         return ResponseEntity.ok(updatedBooking);
     }
 
     /**
      * Cancel booking (Admin only)
      */
-    @Operation(summary = "Cancel booking", 
-               description = "Cancel booking with reason (Admin only)")
+    @Operation(summary = "Cancel booking", description = "Cancel booking with reason (Admin only)")
     @Tag(name = "Admin Booking Management")
     @PutMapping("/{bookingId}/cancel")
     public ResponseEntity<Booking> cancelBooking(
-            @Parameter(description = "Booking ID", required = true)
-            @PathVariable UUID bookingId,
-            @Parameter(description = "Cancellation reason")
-            @RequestParam(required = false) String reason) {
-        
+            @Parameter(description = "Booking ID", required = true) @PathVariable UUID bookingId,
+            @Parameter(description = "Cancellation reason") @RequestParam(required = false) String reason) {
+
         log.info("Admin cancelling booking {} with reason: {}", bookingId, reason);
-        
+
         Booking cancelledBooking = backofficeBookingService.cancelBooking(bookingId, reason);
-        
+
         return ResponseEntity.ok(cancelledBooking);
     }
 
     /**
      * Search bookings with text search
      */
-    @Operation(summary = "Search bookings", 
-               description = "Search bookings by text (booking reference, customer info, etc.)")
+    @Operation(summary = "Search bookings", description = "Search bookings by text (booking reference, customer info, etc.)")
     @GetMapping("/search")
     public ResponseEntity<Page<Booking>> searchBookings(
-            @Parameter(description = "Search term")
-            @RequestParam String q,
+            @Parameter(description = "Search term") @RequestParam String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        
+
         log.info("Searching bookings with term: {}", q);
-        
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Booking> bookings = backofficeBookingService.searchBookings(q, pageable);
-        
+
         return ResponseEntity.ok(bookings);
     }
 
     /**
      * Get booking summary for dashboard
      */
-    @Operation(summary = "Get booking summary", 
-               description = "Get booking summary statistics for dashboard")
+    @Operation(summary = "Get booking summary", description = "Get booking summary statistics for dashboard")
     @GetMapping("/summary")
     public ResponseEntity<Map<String, Object>> getBookingSummary(
-            @Parameter(description = "Start date")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @Parameter(description = "End date")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        
+            @Parameter(description = "Start date") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @Parameter(description = "End date") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
         log.info("Fetching booking summary for period: {} to {}", startDate, endDate);
-        
+
         Map<String, Object> summary = backofficeBookingService.getBookingSummary(startDate, endDate);
-        
+
         return ResponseEntity.ok(summary);
     }
 }

@@ -54,6 +54,7 @@ export interface Airline {
   activeFlights?: number
   totalRoutes?: number
   status?: string
+  media?: MediaResponse[]
 }
 
 export interface Airport {
@@ -229,6 +230,12 @@ export interface Customer {
   status: "ACTIVE" | "INACTIVE" | "BANNED"
   createdAt: string
   lastLoginAt?: string
+}
+
+export interface CustomerStatistics {
+  totalCustomers: number
+  activeCustomers: number
+  newCustomersThisMonth: number
 }
 
 export interface FlightFare {

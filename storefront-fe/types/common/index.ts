@@ -130,6 +130,7 @@ export interface SelectedFlight {
   fareId?: string
 }
 
+
 export interface SelectedHotel {
   id: string
   name: string
@@ -140,6 +141,7 @@ export interface SelectedHotel {
   hotelLongitude?: number
   rating?: number
   roomTypeId: string
+  roomId?: string
   roomType: string
   roomName: string
   price: number // deprecated: kept for compatibility (represents price per night)

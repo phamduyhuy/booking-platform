@@ -66,6 +66,9 @@ public class PaymentService {
             // Save transaction
             PaymentTransaction savedTransaction = paymentTransactionRepository.save(transaction);
 
+            // Sync payment status with transaction status (critical for MCP/server-side payments)
+            syncPaymentStatusWithTransaction(savedPayment, savedTransaction);
+
             // Publish payment event
             publishPaymentEvent(savedPayment, savedTransaction, "PaymentInitiated");
 
@@ -468,6 +471,47 @@ public class PaymentService {
 
     // Helper methods
 
+    /**
+     * Sync Payment status with Transaction status
+     * Critical for MCP/server-side payments where transaction completes immediately
+     */
+    private void syncPaymentStatusWithTransaction(Payment payment, PaymentTransaction transaction) {
+        PaymentStatus transactionStatus = transaction.getStatus();
+        
+        // If transaction succeeded, mark payment as completed
+        if (transactionStatus != null && transactionStatus.isSuccessful()) {
+            log.info("Syncing payment {} to COMPLETED based on successful transaction {}", 
+                    payment.getPaymentId(), transaction.getTransactionId());
+            payment.markAsConfirmed();
+            paymentRepository.save(payment);
+        }
+        // If transaction failed, mark payment as failed
+        else if (transactionStatus == PaymentStatus.FAILED || 
+                 transactionStatus == PaymentStatus.DECLINED ||
+                 transactionStatus == PaymentStatus.ERROR) {
+            log.info("Syncing payment {} to FAILED based on failed transaction {}", 
+                    payment.getPaymentId(), transaction.getTransactionId());
+            payment.markAsFailed(transaction.getFailureReason() != null ? 
+                    transaction.getFailureReason() : "Transaction failed");
+            paymentRepository.save(payment);
+        }
+        // If transaction cancelled
+        else if (transactionStatus == PaymentStatus.CANCELLED) {
+            log.info("Syncing payment {} to CANCELLED based on cancelled transaction {}", 
+                    payment.getPaymentId(), transaction.getTransactionId());
+            payment.setStatus(PaymentStatus.CANCELLED);
+            payment.setFailureReason("Payment cancelled");
+            paymentRepository.save(payment);
+        }
+        // Otherwise keep payment status as-is or set to transaction status if different
+        else if (transactionStatus != null && payment.getStatus() != transactionStatus) {
+            log.info("Syncing payment {} status from {} to {} based on transaction {}", 
+                    payment.getPaymentId(), payment.getStatus(), transactionStatus, transaction.getTransactionId());
+            payment.setStatus(transactionStatus);
+            paymentRepository.save(payment);
+        }
+    }
+
     private void publishPaymentEvent(Payment payment, PaymentTransaction transaction, String eventType) {
         Map<String, Object> eventData = Map.ofEntries(
             Map.entry("eventType", eventType),
@@ -479,8 +523,13 @@ public class PaymentService {
             Map.entry("currency", transaction.getCurrency()),
             Map.entry("status", transaction.getStatus()),
             Map.entry("provider", transaction.getProvider()),
-            Map.entry("sagaId", payment.getSagaId() != null ? payment.getSagaId() : "")
+            Map.entry("sagaId", payment.getSagaId() != null ? payment.getSagaId() : ""),
+            Map.entry("gatewayTransactionId", transaction.getGatewayTransactionId() != null ? transaction.getGatewayTransactionId() : ""),
+            Map.entry("gatewayStatus", transaction.getGatewayStatus() != null ? transaction.getGatewayStatus() : "")
         );
+
+        log.info("Publishing payment event: type={}, paymentId={}, bookingId={}, sagaId={}, status={}", 
+                eventType, payment.getPaymentId(), payment.getBookingId(), payment.getSagaId(), transaction.getStatus());
 
         eventPublisher.publishEvent(
             eventType,
@@ -488,6 +537,8 @@ public class PaymentService {
             payment.getPaymentId().toString(),
             eventData
         );
+        
+        log.info("Payment event published successfully: type={}, paymentId={}", eventType, payment.getPaymentId());
     }
 
     private void storeStripePaymentMethodIfNeeded(PaymentTransaction transaction) {

@@ -6,11 +6,13 @@ import com.pdh.flight.dto.response.FlightScheduleDto;
 import com.pdh.flight.dto.response.FlightDto;
 import com.pdh.flight.mapper.BackofficeFlightMapper;
 import com.pdh.flight.model.FlightSchedule;
+import com.pdh.flight.model.Flight;
 import com.pdh.flight.model.Aircraft;
 import com.pdh.flight.model.enums.ScheduleStatus;
 import com.pdh.flight.repository.FlightScheduleRepository;
 import com.pdh.flight.repository.FlightRepository;
 import com.pdh.flight.repository.AircraftRepository;
+import com.pdh.flight.repository.specification.FlightScheduleSpecification;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,9 +20,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
@@ -42,46 +44,52 @@ public class BackofficeFlightScheduleService {
     private final BackofficeFlightMapper flightMapper;
 
     /**
-     * Get all flight schedules with pagination and filtering
+     * Get all flight schedules with pagination and filtering using JPA Specification
+     * 
+     * @param page Page number
+     * @param size Page size
+     * @param search Search term for flight number and airports (city/country/IATA)
+     * @param date Filter by departure date
+     * @param departureAirportId Filter by specific departure airport
+     * @param arrivalAirportId Filter by specific arrival airport
+     * @return Paginated flight schedule results
      */
     @Transactional(readOnly = true)
-    public Map<String, Object> getAllFlightSchedules(int page, int size, Long flightId, String status, LocalDate date) {
-        log.info("Fetching flight schedules: page={}, size={}, flightId={}, status={}, date={}", 
-                page, size, flightId, status, date);
+    public Map<String, Object> getAllFlightSchedules(int page, int size, String search, LocalDate date, 
+                                                      Integer departureAirportId, Integer arrivalAirportId) {
+        log.info("Fetching flight schedules: page={}, size={}, search={}, date={}, departureAirportId={}, arrivalAirportId={}", 
+                page, size, search, date, departureAirportId, arrivalAirportId);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("departureTime").ascending());
-        Page<FlightSchedule> schedulePage;
-
-        // Apply filters based on parameters
-        if (flightId != null && StringUtils.hasText(status) && date != null) {
-            // All filters applied
-            ScheduleStatus scheduleStatus = ScheduleStatus.valueOf(status);
-            schedulePage = flightScheduleRepository.findByFlightIdAndStatusAndDateAndIsDeletedFalse(
-                    flightId, scheduleStatus, date, pageable);
-        } else if (flightId != null && date != null) {
-            // Flight ID and date filter
-            schedulePage = flightScheduleRepository.findByFlightIdAndDateAndIsDeletedFalse(
-                    flightId, date, pageable);
-        } else if (flightId != null && StringUtils.hasText(status)) {
-            // Flight ID and status filter
-            ScheduleStatus scheduleStatus = ScheduleStatus.valueOf(status);
-            schedulePage = flightScheduleRepository.findByFlightIdAndStatusAndIsDeletedFalse(
-                    flightId, scheduleStatus, pageable);
-        } else if (flightId != null) {
-            // Flight ID filter only
-            schedulePage = flightScheduleRepository.findByFlightIdAndIsDeletedFalse(flightId, pageable);
-        } else if (StringUtils.hasText(status)) {
-            // Status filter only
-            ScheduleStatus scheduleStatus = ScheduleStatus.valueOf(status);
-            schedulePage = flightScheduleRepository.findByStatusAndIsDeletedFalse(scheduleStatus, pageable);
-        } else if (date != null) {
-            // Date filter only
-            schedulePage = flightScheduleRepository.findByDateAndIsDeletedFalse(date, pageable);
-        } else {
-            // No filters
-            schedulePage = flightScheduleRepository.findByIsDeletedFalse(pageable);
+        
+        // Build specification using Specification pattern
+        Specification<FlightSchedule> spec = Specification.where(FlightScheduleSpecification.isNotDeleted());
+        
+        if (search != null && !search.trim().isEmpty()) {
+            spec = spec.and(FlightScheduleSpecification.searchByTerm(search));
         }
+        
+        if (date != null) {
+            spec = spec.and(FlightScheduleSpecification.hasDepartureDate(date));
+        }
+        
+        if (departureAirportId != null) {
+            spec = spec.and(FlightScheduleSpecification.hasDepartureAirportId(departureAirportId));
+        }
+        
+        if (arrivalAirportId != null) {
+            spec = spec.and(FlightScheduleSpecification.hasArrivalAirportId(arrivalAirportId));
+        }
+        
+        Page<FlightSchedule> schedulePage = flightScheduleRepository.findAll(spec, pageable);
+        
+        return buildResponse(schedulePage);
+    }
 
+    /**
+     * Helper method to build response from page
+     */
+    private Map<String, Object> buildResponse(Page<FlightSchedule> schedulePage) {
         List<FlightScheduleDto> content = schedulePage.getContent().stream()
                 .map(this::toDtoWithDetails)
                 .toList();
@@ -94,9 +102,10 @@ public class BackofficeFlightScheduleService {
         response.put("totalPages", schedulePage.getTotalPages());
         response.put("first", schedulePage.isFirst());
         response.put("last", schedulePage.isLast());
-
         return response;
     }
+
+
 
     /**
      * Get single flight schedule with full details
@@ -104,14 +113,14 @@ public class BackofficeFlightScheduleService {
     @Transactional(readOnly = true)
     public FlightScheduleDto getFlightSchedule(UUID scheduleId) {
         log.info("Fetching flight schedule details: {}", scheduleId);
-        
+
         FlightSchedule schedule = flightScheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new EntityNotFoundException("Flight schedule not found with ID: " + scheduleId));
-        
+
         if (schedule.isDeleted()) {
             throw new EntityNotFoundException("Flight schedule not found with ID: " + scheduleId);
         }
-        
+
         return toDtoWithDetails(schedule);
     }
 
@@ -120,18 +129,20 @@ public class BackofficeFlightScheduleService {
      */
     public FlightScheduleDto createFlightSchedule(FlightScheduleCreateDto createDto) {
         log.info("Creating new flight schedule for flight: {}", createDto.getFlightId());
-        
+
         // Validate that the flight exists
         flightRepository.findById(createDto.getFlightId())
                 .orElseThrow(() -> new EntityNotFoundException("Flight not found with ID: " + createDto.getFlightId()));
-        
+
         // Validate that the aircraft exists
         Aircraft aircraft = aircraftRepository.findById(createDto.getAircraftId())
-                .orElseThrow(() -> new EntityNotFoundException("Aircraft not found with ID: " + createDto.getAircraftId()));
-        
+                .orElseThrow(
+                        () -> new EntityNotFoundException("Aircraft not found with ID: " + createDto.getAircraftId()));
+
         // Validate aircraft availability (no overlapping schedules)
-        validateAircraftAvailability(createDto.getAircraftId(), createDto.getDepartureTime(), createDto.getArrivalTime(), null);
-        
+        validateAircraftAvailability(createDto.getAircraftId(), createDto.getDepartureTime(),
+                createDto.getArrivalTime(), null);
+
         FlightSchedule schedule = new FlightSchedule();
         schedule.setFlightId(createDto.getFlightId());
         schedule.setDepartureTime(createDto.getDepartureTime());
@@ -139,10 +150,10 @@ public class BackofficeFlightScheduleService {
         schedule.setAircraftType(aircraft.getModel()); // Set from aircraft
         schedule.setAircraftId(createDto.getAircraftId()); // Set aircraft ID
         schedule.setStatus(createDto.getStatus());
-        
+
         FlightSchedule savedSchedule = flightScheduleRepository.save(schedule);
         log.info("Flight schedule created successfully with ID: {}", savedSchedule.getScheduleId());
-        
+
         return toDtoWithDetails(savedSchedule);
     }
 
@@ -151,43 +162,46 @@ public class BackofficeFlightScheduleService {
      */
     public FlightScheduleDto updateFlightSchedule(UUID scheduleId, FlightScheduleUpdateDto updateDto) {
         log.info("Updating flight schedule: {}", scheduleId);
-        
+
         FlightSchedule schedule = flightScheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new EntityNotFoundException("Flight schedule not found with ID: " + scheduleId));
-        
+
         if (schedule.isDeleted()) {
             throw new EntityNotFoundException("Flight schedule not found with ID: " + scheduleId);
         }
-        
+
         // Update fields if provided
         if (updateDto.getDepartureTime() != null) {
             schedule.setDepartureTime(updateDto.getDepartureTime());
         }
-        
+
         if (updateDto.getArrivalTime() != null) {
             schedule.setArrivalTime(updateDto.getArrivalTime());
         }
-        
+
         if (updateDto.getAircraftId() != null) {
             Aircraft aircraft = aircraftRepository.findById(updateDto.getAircraftId())
-                    .orElseThrow(() -> new EntityNotFoundException("Aircraft not found with ID: " + updateDto.getAircraftId()));
-            
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "Aircraft not found with ID: " + updateDto.getAircraftId()));
+
             // Validate aircraft availability for the new time slot
-            ZonedDateTime departureTime = updateDto.getDepartureTime() != null ? updateDto.getDepartureTime() : schedule.getDepartureTime();
-            ZonedDateTime arrivalTime = updateDto.getArrivalTime() != null ? updateDto.getArrivalTime() : schedule.getArrivalTime();
-            
+            ZonedDateTime departureTime = updateDto.getDepartureTime() != null ? updateDto.getDepartureTime()
+                    : schedule.getDepartureTime();
+            ZonedDateTime arrivalTime = updateDto.getArrivalTime() != null ? updateDto.getArrivalTime()
+                    : schedule.getArrivalTime();
+
             validateAircraftAvailability(updateDto.getAircraftId(), departureTime, arrivalTime, scheduleId);
             schedule.setAircraftType(aircraft.getModel());
             schedule.setAircraftId(updateDto.getAircraftId());
         }
-        
+
         if (updateDto.getStatus() != null) {
             schedule.setStatus(updateDto.getStatus());
         }
-        
+
         FlightSchedule updatedSchedule = flightScheduleRepository.save(schedule);
         log.info("Flight schedule updated successfully: {}", scheduleId);
-        
+
         return toDtoWithDetails(updatedSchedule);
     }
 
@@ -196,22 +210,22 @@ public class BackofficeFlightScheduleService {
      */
     public void deleteFlightSchedule(UUID scheduleId) {
         log.info("Deleting flight schedule: {}", scheduleId);
-        
+
         FlightSchedule schedule = flightScheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new EntityNotFoundException("Flight schedule not found with ID: " + scheduleId));
-        
+
         if (schedule.isDeleted()) {
             throw new EntityNotFoundException("Flight schedule not found with ID: " + scheduleId);
         }
-        
+
         // Check if schedule can be deleted (e.g., not if it has bookings)
         if ("ACTIVE".equals(schedule.getStatus()) || "COMPLETED".equals(schedule.getStatus())) {
             throw new IllegalStateException("Cannot delete active or completed flight schedule");
         }
-        
+
         schedule.setDeleted(true);
         schedule.setDeletedAt(ZonedDateTime.now());
-        
+
         flightScheduleRepository.save(schedule);
         log.info("Flight schedule deleted successfully: {}", scheduleId);
     }
@@ -222,14 +236,14 @@ public class BackofficeFlightScheduleService {
     @Transactional(readOnly = true)
     public Map<String, Object> getFlightScheduleStatistics() {
         log.info("Fetching flight schedule statistics");
-        
+
         long totalSchedules = flightScheduleRepository.countByIsDeletedFalse();
         long scheduledCount = flightScheduleRepository.countByStatusAndIsDeletedFalse(ScheduleStatus.SCHEDULED);
         long activeCount = flightScheduleRepository.countByStatusAndIsDeletedFalse(ScheduleStatus.ACTIVE);
         long delayedCount = flightScheduleRepository.countByStatusAndIsDeletedFalse(ScheduleStatus.DELAYED);
         long cancelledCount = flightScheduleRepository.countByStatusAndIsDeletedFalse(ScheduleStatus.CANCELLED);
         long completedCount = flightScheduleRepository.countByStatusAndIsDeletedFalse(ScheduleStatus.COMPLETED);
-        
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalSchedules", totalSchedules);
         stats.put("scheduledCount", scheduledCount);
@@ -237,18 +251,19 @@ public class BackofficeFlightScheduleService {
         stats.put("delayedCount", delayedCount);
         stats.put("cancelledCount", cancelledCount);
         stats.put("completedCount", completedCount);
-        
+
         return stats;
     }
 
     /**
      * Validate aircraft availability for the given time slot
      */
-    private void validateAircraftAvailability(Long aircraftId, ZonedDateTime departureTime, ZonedDateTime arrivalTime, UUID excludeScheduleId) {
+    private void validateAircraftAvailability(Long aircraftId, ZonedDateTime departureTime, ZonedDateTime arrivalTime,
+            UUID excludeScheduleId) {
         // Check for overlapping schedules for the same aircraft
         List<FlightSchedule> overlapping = flightScheduleRepository.findOverlappingSchedules(
                 aircraftId, departureTime, arrivalTime, excludeScheduleId);
-        
+
         if (!overlapping.isEmpty()) {
             throw new IllegalArgumentException("Aircraft is not available during the requested time slot. " +
                     "Conflicting schedule ID: " + overlapping.get(0).getScheduleId());
@@ -278,7 +293,8 @@ public class BackofficeFlightScheduleService {
             builder.durationMinutes(duration.toMinutes());
         }
 
-        // Load related entities if needed (use lightweight DTO to prevent circular references)
+        // Load related entities if needed (use lightweight DTO to prevent circular
+        // references)
         if (schedule.getFlight() != null) {
             FlightDto flightDto = flightMapper.toLightweightDto(schedule.getFlight());
             builder.flight(flightDto);

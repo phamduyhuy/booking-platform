@@ -133,19 +133,23 @@ class AiChatService {
 
     if (this.socket) {
       if (this.socket.readyState === WebSocket.OPEN) {
+        console.log('✅ Reusing existing WebSocket connection');
         return this.socket;
       }
       if (this.socket.readyState === WebSocket.CONNECTING && this.socketReady) {
+        console.log('⏳ Waiting for existing WebSocket connection...');
         return this.socketReady;
       }
     }
 
     const wsUrl = this.getWebSocketUrl();
+    console.log('🔌 Establishing new WebSocket connection to:', wsUrl);
     const socket = new WebSocket(wsUrl);
     this.socket = socket;
 
     this.socketReady = new Promise<WebSocket>((resolve, reject) => {
       const handleOpen = () => {
+        console.log('✅ WebSocket connection established successfully');
         socket.removeEventListener('open', handleOpen);
         socket.removeEventListener('error', handleInitialError);
         socket.addEventListener('message', this.handleSocketMessage);
@@ -155,6 +159,7 @@ class AiChatService {
       };
 
       const handleInitialError = (event: Event) => {
+        console.error('❌ WebSocket connection failed:', event);
         socket.removeEventListener('open', handleOpen);
         socket.removeEventListener('error', handleInitialError);
         this.cleanupSocket();
@@ -228,35 +233,49 @@ class AiChatService {
 
     const requestId = this.generateRequestId();
     const conversationId = options.conversationId ?? this.generateConversationId();
-    const socket = await this.ensureSocket();
 
-    return new Promise<ChatMessageResponse>((resolve, reject) => {
-      const pendingRequest: PendingChatRequest = {
-        requestId,
-        conversationId,
-        resolve,
-        reject,
-        onEvent: options.onEvent,
-      };
-
-      this.currentRequest = pendingRequest;
-
-      const payload = {
-        type: 'prompt',
-        requestId,
-        conversationId,
-        message: trimmed,
-        timestamp: Date.now(),
-      };
-
-      try {
-        socket.send(JSON.stringify(payload));
-      } catch (err: any) {
-        this.currentRequest = null;
-        this.cleanupSocket();
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
+    console.log('📤 Sending message via WebSocket:', {
+      requestId,
+      conversationId,
+      messageLength: trimmed.length
     });
+
+    try {
+      const socket = await this.ensureSocket();
+
+      return new Promise<ChatMessageResponse>((resolve, reject) => {
+        const pendingRequest: PendingChatRequest = {
+          requestId,
+          conversationId,
+          resolve,
+          reject,
+          onEvent: options.onEvent,
+        };
+
+        this.currentRequest = pendingRequest;
+
+        const payload = {
+          type: 'prompt',
+          requestId,
+          conversationId,
+          message: trimmed,
+          timestamp: Date.now(),
+        };
+
+        try {
+          socket.send(JSON.stringify(payload));
+          console.log('✅ WebSocket message sent successfully');
+        } catch (err: any) {
+          console.error('❌ Failed to send WebSocket message:', err);
+          this.currentRequest = null;
+          this.cleanupSocket();
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      });
+    } catch (err) {
+      console.error('❌ WebSocket connection failed, will fallback to REST:', err);
+      throw err;
+    }
   }
 
   async sendPromptRest(
@@ -299,7 +318,7 @@ class AiChatService {
    * Note: userId is automatically extracted from JWT token on backend
    */
   async sendMessage(
-    message: string, 
+    message: string,
     context?: ChatContext
   ): Promise<ChatResponse> {
     const trimmed = message.trim();
@@ -330,33 +349,14 @@ class AiChatService {
     } catch (error: any) {
       console.error('AI Chat Service Error:', error);
 
-      // Attempt REST fallback if WebSocket fails
-      try {
-        const fallback = await this.sendPromptRest(message, { conversationId });
-        const suggestions = fallback.nextRequestSuggestions ?? fallback.next_request_suggestions ?? [];
-        return {
-          userMessage: message,
-          aiResponse: fallback.aiResponse ?? '',
-          conversationId: fallback.conversationId ?? conversationId,
-          requestId: fallback.requestId,
-          userId: fallback.userId,
-          timestamp: this.normalizeTimestamp(fallback.timestamp),
-          results: fallback.results ?? [],
-          nextRequestSuggestions: suggestions,
-          requiresConfirmation: fallback.requiresConfirmation,
-          confirmationContext: fallback.confirmationContext,
-        };
-      } catch (restError: any) {
-        console.error('AI Chat REST fallback error:', restError);
-      }
-
-      // Return a fallback response
+      // Force WebSocket only - no REST fallback
+      // Return error response directly
       return {
         userMessage: message,
-        aiResponse: 'Xin lỗi, tôi đang gặp sự cố kỹ thuật. Vui lòng thử lại sau.',
+        aiResponse: 'Xin lỗi, tôi đang gặp sự cố kết nối. Vui lòng thử lại sau.',
         conversationId,
         timestamp: new Date().toISOString(),
-        error: error?.message || 'Không thể kết nối với AI service',
+        error: error?.message || 'Không thể kết nối với AI service (WebSocket)',
         results: [],
         nextRequestSuggestions: []
       };
@@ -418,7 +418,7 @@ class AiChatService {
     try {
       return [
         "Tìm chuyến bay từ Hồ Chí Minh đến Đà Nẵng",
-        "Gợi ý khách sạn 4 sao tại Đà Nẵng", 
+        "Gợi ý khách sạn 4 sao tại Đà Nẵng",
         "Lập kế hoạch du lịch 3 ngày 2 đêm",
         "Tìm địa điểm ăn uống ngon tại Hội An"
       ];

@@ -129,9 +129,15 @@ public class BookingSagaOrchestrator {
             if (isBlank(eventType))
                 eventType = text(payload, "type");
         }
+        
+        // Trim whitespace and normalize
+        if (eventType != null) {
+            eventType = eventType.trim();
+        }
 
         log.debug("EVENT TYPE HEADER: {}", eventTypeHeader);
         log.debug("DETERMINED EVENT TYPE: {}", eventType);
+        log.debug("EVENT TYPE LENGTH: {}, TRIMMED: '{}'", eventType != null ? eventType.length() : 0, eventType != null ? eventType.trim() : "null");
 
         if (isBlank(eventType)) {
             log.warn("Saga outbox event ignored due to missing eventType. message={}", root.toString());
@@ -140,14 +146,22 @@ public class BookingSagaOrchestrator {
 
         // 4) Payload phẳng để downstream xử lý
         String payloadJson = payload.toString();
+        
+        log.info("About to process saga event: type='{}', payloadLength={}", eventType, payloadJson.length());
 
         switch (eventType) {
-            case "FlightReserved", "FlightReservationFailed", "FlightReservationCancelled" ->
+            case "FlightReserved", "FlightReservationFailed", "FlightReservationCancelled" -> {
+                log.info("Processing flight saga event: {}", eventType);
                 processSagaCallback(payloadJson, eventType, this::handleFlightEvent);
-            case "HotelReserved", "HotelReservationFailed", "HotelReservationCancelled" ->
+            }
+            case "HotelReserved", "HotelReservationFailed", "HotelReservationCancelled" -> {
+                log.info("Processing hotel saga event: {}", eventType);
                 processSagaCallback(payloadJson, eventType, this::handleHotelEvent);
-            case "PaymentProcessed", "PaymentFailed", "PaymentRefunded", "PaymentCancelled" ->
+            }
+            case "PaymentProcessed", "PaymentFailed", "PaymentRefunded", "PaymentCancelled" -> {
+                log.info("Processing payment saga event: {} with payload: {}", eventType, payloadJson);
                 processSagaCallback(payloadJson, eventType, this::handlePaymentEvent);
+            }
             default ->
                 log.debug("Ignoring outbox event type {} for saga orchestration", eventType);
         }
@@ -182,7 +196,10 @@ public class BookingSagaOrchestrator {
     }
 
     private void processSagaCallback(String payloadJson, String eventType, SagaEventHandler handler) {
+        log.info("processSagaCallback called: eventType='{}', payloadLength={}", eventType, payloadJson != null ? payloadJson.length() : 0);
+        
         if (StringUtils.isBlank(payloadJson)) {
+            log.warn("processSagaCallback: payloadJson is blank for eventType={}", eventType);
             return;
         }
 
@@ -195,12 +212,14 @@ public class BookingSagaOrchestrator {
             }
 
             UUID bookingId = UUID.fromString(bookingIdNode.asText());
+            log.info("Looking for saga with bookingId={} for eventType={}", bookingId, eventType);
+            
             Optional<BookingSagaInstance> sagaOpt = sagaRepository.findByBookingId(bookingId);
             Optional<Booking> bookingOpt = bookingRepository.findByBookingId(bookingId);
 
             if (sagaOpt.isEmpty() || bookingOpt.isEmpty()) {
-                log.warn("Saga callback ignored because saga or booking not found: bookingId={}, type={}", bookingId,
-                        eventType);
+                log.warn("Saga callback ignored because saga or booking not found: bookingId={}, type={}, sagaExists={}, bookingExists={}", 
+                        bookingId, eventType, sagaOpt.isPresent(), bookingOpt.isPresent());
                 return;
             }
 
@@ -210,7 +229,9 @@ public class BookingSagaOrchestrator {
                 return;
             }
 
+            log.info("Invoking handler for eventType={}, saga={}, bookingId={}", eventType, saga.getSagaId(), bookingId);
             handler.handle(saga, bookingOpt.get(), eventType, payload);
+            log.info("Handler completed successfully for eventType={}, saga={}", eventType, saga.getSagaId());
         } catch (Exception e) {
             log.error("Error processing saga callback eventType={} payload={} ", eventType, payloadJson, e);
         }
@@ -397,8 +418,11 @@ public class BookingSagaOrchestrator {
 
     @Transactional
     void onPaymentProcessed(BookingSagaInstance saga, Booking booking, JsonNode payload) {
-        log.info("Payment processed for booking {} saga {}", booking.getBookingId(), saga.getSagaId());
+        log.info("Payment processed for booking {} saga {} - Current state: {}, Booking status: {}", 
+                booking.getBookingId(), saga.getSagaId(), saga.getCurrentState(), booking.getStatus());
+        
         transitionState(saga, SagaState.PAYMENT_COMPLETED, "PaymentProcessed", payload, null);
+        
         Map<String, Object> extras = new HashMap<>();
         extras.put("emailTemplate", "booking-payment.ftl");
         Map<String, Object> paymentDetails = convertJsonNodeToMap(payload);
@@ -406,7 +430,11 @@ public class BookingSagaOrchestrator {
             extras.put("payment", paymentDetails);
         }
         publishNotificationEvent(booking, "BookingPaymentSucceeded", extras);
+        
         completeSaga(saga, booking, payload);
+        
+        log.info("Payment processed completed - Saga state: {}, Booking status: {}", 
+                saga.getCurrentState(), booking.getStatus());
     }
 
     @Transactional

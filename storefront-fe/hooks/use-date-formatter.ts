@@ -5,7 +5,7 @@
 import { usePreferences } from '@/contexts/preferences-context'
 import { format, formatRelative as formatRelativeOriginal, parseISO } from 'date-fns'
 import { vi } from 'date-fns/locale'
-import { formatInTimeZone } from 'date-fns-tz'
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz'
 
 /**
  * Parse a date string as UTC, handling various formats
@@ -80,13 +80,15 @@ export function useDateFormatter() {
   }
 
   /**
-   * Get relative time using formatRelative from date-fns with locale
+   * Get relative time using formatRelative from date-fns with locale and timezone
    */
   const formatRelative = (dateInput: string | Date): string => {
     try {
       const date = parseUtcDateInput(dateInput)
+      // Convert UTC time to user's timezone before formatting relative time
+      const zonedDate = toZonedTime(date, timezone)
       const now = new Date()
-      return formatRelativeOriginal(date, now, { locale })
+      return formatRelativeOriginal(zonedDate, now, { locale })
     } catch {
       return typeof dateInput === 'string' ? dateInput : ''
     }

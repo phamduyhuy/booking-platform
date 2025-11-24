@@ -524,7 +524,7 @@ export function FlightSearchTab({ onBookingStart }: FlightSearchTabProps = {}) {
     <div className="flex flex-col h-full bg-gray-50">
       {/* Search Form */}
       <div className="bg-white border-b shadow-sm" ref={searchSectionRef}>
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full">
           {/* Chevron Toggle Button - Always visible */}
           <div className="flex justify-center pt-2">
             <Button
@@ -659,7 +659,7 @@ export function FlightSearchTab({ onBookingStart }: FlightSearchTabProps = {}) {
 
       {/* Results Section */}
       <div className="flex-1 overflow-auto" ref={resultsContainerRef}>
-        <div className="max-w-6xl mx-auto p-6">
+        <div className="w-full p-6">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Filters Sidebar - Sticky */}
             <div className="lg:col-span-1">

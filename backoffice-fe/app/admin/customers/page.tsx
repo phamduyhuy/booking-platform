@@ -1,187 +1,269 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { Search, MoreHorizontal, Eye, Edit, Ban, Users, UserCheck, UserX, Star, Plus, Trash2 } from "lucide-react"
-import { AdminLayout } from "@/components/admin/admin-layout"
-import { CustomerService } from "@/services/customer-service"
-import { CreateCustomerDialog } from "@/components/admin/create-customer-dialog"
-import { EditCustomerDialog } from "@/components/admin/edit-customer-dialog"
-import { CustomerDetailDialog } from "@/components/admin/customer-detail-dialog"
-import { useToast } from "@/hooks/use-toast"
-import type { Customer, PaginatedResponse } from "@/types/api"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Search,
+  MoreHorizontal,
+  Eye,
+  Edit,
+  Ban,
+  Users,
+  UserCheck,
+  UserX,
+  Star,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { AdminLayout } from "@/components/admin/admin-layout";
+import { CustomerService } from "@/services/customer-service";
+import { CreateCustomerDialog } from "@/components/admin/create-customer-dialog";
+import { EditCustomerDialog } from "@/components/admin/edit-customer-dialog";
+import { CustomerDetailDialog } from "@/components/admin/customer-detail-dialog";
+import { useToast } from "@/hooks/use-toast";
+import type {
+  Customer,
+  PaginatedResponse,
+  CustomerStatistics,
+} from "@/types/api";
 
 export default function AdminCustomers() {
-  const [customers, setCustomers] = useState<PaginatedResponse<Customer> | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [currentPage, setCurrentPage] = useState(0)
-  const { toast } = useToast()
+  const [customers, setCustomers] =
+    useState<PaginatedResponse<Customer> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null
+  );
+  const [currentPage, setCurrentPage] = useState(0);
+  const { toast } = useToast();
+
+  const [stats, setStats] = useState<CustomerStatistics>({
+    totalCustomers: 0,
+    activeCustomers: 0,
+    newCustomersThisMonth: 0,
+  });
 
   useEffect(() => {
-    loadCustomers()
-  }, [searchTerm, currentPage])
+    loadCustomers();
+    loadStats();
+  }, [searchTerm, currentPage]);
+
+  const loadStats = async () => {
+    try {
+      const data = await CustomerService.getCustomerStatistics();
+      setStats(data);
+    } catch (error) {
+      console.error("Failed to load stats:", error);
+    }
+  };
 
   const loadCustomers = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       const data = await CustomerService.getCustomers({
         search: searchTerm || undefined,
         page: currentPage,
         size: 10,
-      })
-      setCustomers(data)
+      });
+      setCustomers(data);
     } catch (error) {
-      console.error("Failed to load customers:", error)
+      console.error("Failed to load customers:", error);
       toast({
         title: "Lỗi",
         description: "Không thể tải danh sách khách hàng",
         variant: "destructive",
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleViewCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer)
-    setDetailDialogOpen(true)
-  }
+    setSelectedCustomer(customer);
+    setDetailDialogOpen(true);
+  };
 
   const handleEditCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer)
-    setEditDialogOpen(true)
-  }
+    setSelectedCustomer(customer);
+    setEditDialogOpen(true);
+  };
 
   const handleDeleteCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer)
-    setDeleteDialogOpen(true)
-  }
+    setSelectedCustomer(customer);
+    setDeleteDialogOpen(true);
+  };
 
   const confirmDelete = async () => {
-    if (!selectedCustomer) return
+    if (!selectedCustomer) return;
 
     try {
-      await CustomerService.deleteCustomer(selectedCustomer.id)
+      await CustomerService.deleteCustomer(selectedCustomer.id);
       toast({
         title: "Thành công",
         description: "Đã xóa khách hàng thành công",
-      })
-      loadCustomers()
-      setDeleteDialogOpen(false)
-      setSelectedCustomer(null)
+      });
+      loadCustomers();
+      loadStats();
+      setDeleteDialogOpen(false);
+      setSelectedCustomer(null);
     } catch (error) {
       toast({
         title: "Lỗi",
         description: "Không thể xóa khách hàng",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return <Badge className="bg-green-100 text-green-800">Hoạt động</Badge>
+        return <Badge className="bg-green-100 text-green-800">Hoạt động</Badge>;
       case "INACTIVE":
-        return <Badge className="bg-gray-100 text-gray-800">Không hoạt động</Badge>
+        return (
+          <Badge className="bg-gray-100 text-gray-800">Không hoạt động</Badge>
+        );
       case "BANNED":
-        return <Badge className="bg-red-100 text-red-800">Bị khóa</Badge>
+        return <Badge className="bg-red-100 text-red-800">Bị khóa</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status}</Badge>;
     }
-  }
+  };
 
   const getTierBadge = (tier: string) => {
     switch (tier) {
       case "PLATINUM":
-        return <Badge className="bg-purple-100 text-purple-800">Platinum</Badge>
+        return (
+          <Badge className="bg-purple-100 text-purple-800">Platinum</Badge>
+        );
       case "GOLD":
-        return <Badge className="bg-yellow-100 text-yellow-800">Gold</Badge>
+        return <Badge className="bg-yellow-100 text-yellow-800">Gold</Badge>;
       case "SILVER":
-        return <Badge className="bg-gray-100 text-gray-800">Silver</Badge>
+        return <Badge className="bg-gray-100 text-gray-800">Silver</Badge>;
       case "BRONZE":
-        return <Badge className="bg-orange-100 text-orange-800">Bronze</Badge>
+        return <Badge className="bg-orange-100 text-orange-800">Bronze</Badge>;
       default:
-        return <Badge variant="secondary">{tier}</Badge>
+        return <Badge variant="secondary">{tier}</Badge>;
     }
-  }
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
-    }).format(amount)
-  }
-
-  const activeCustomers = customers?.content.filter((c) => c.status === "ACTIVE").length || 0
-  const totalRevenue = customers?.content.reduce((sum, customer) => sum + customer.totalSpent, 0) || 0
-  const vipCustomers = customers?.content.filter((c) => c.tier === "PLATINUM" || c.tier === "GOLD").length || 0
+    }).format(amount);
+  };
 
   return (
     <AdminLayout>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Quản lý Khách hàng</h1>
-        <p className="text-gray-600 mt-2 text-sm lg:text-base">Quản lý thông tin và hoạt động của khách hàng</p>
+        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
+          Quản lý Khách hàng
+        </h1>
+        <p className="text-gray-600 mt-2 text-sm lg:text-base">
+          Quản lý thông tin và hoạt động của khách hàng
+        </p>
       </div>
 
       {/* Stats Cards - Better responsive */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tổng khách hàng</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Tổng khách hàng
+            </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{customers?.totalElements || 0}</div>
+            <div className="text-2xl font-bold">{stats.totalCustomers}</div>
             <p className="text-xs text-muted-foreground">Đã đăng ký</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Khách hàng hoạt động</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Khách hàng hoạt động
+            </CardTitle>
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeCustomers}</div>
+            <div className="text-2xl font-bold">{stats.activeCustomers}</div>
             <p className="text-xs text-muted-foreground">
-              {customers?.totalElements ? Math.round((activeCustomers / customers.totalElements) * 100) : 0}% tổng số
+              {stats.totalCustomers
+                ? Math.round(
+                    (stats.activeCustomers / stats.totalCustomers) * 100
+                  )
+                : 0}
+              % tổng số
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tổng doanh thu</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Khách hàng mới
+            </CardTitle>
             <Star className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{Math.round(totalRevenue / 1000000)}M₫</div>
-            <p className="text-xs text-muted-foreground">Từ khách hàng</p>
+            <div className="text-2xl font-bold">
+              +{stats.newCustomersThisMonth}
+            </div>
+            <p className="text-xs text-muted-foreground">Trong tháng này</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Khách hàng VIP</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Khách hàng VIP
+            </CardTitle>
             <UserX className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{vipCustomers}</div>
+            <div className="text-2xl font-bold">0</div>
             <p className="text-xs text-muted-foreground">Gold & Platinum</p>
           </CardContent>
         </Card>
@@ -192,8 +274,12 @@ export default function AdminCustomers() {
         <CardHeader>
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-lg lg:text-xl">Danh sách khách hàng</CardTitle>
-              <CardDescription className="text-sm">Quản lý thông tin và hoạt động của khách hàng</CardDescription>
+              <CardTitle className="text-lg lg:text-xl">
+                Danh sách khách hàng
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Quản lý thông tin và hoạt động của khách hàng
+              </CardDescription>
             </div>
             <div className="flex items-center space-x-2">
               <div className="relative w-full lg:w-64">
@@ -239,7 +325,10 @@ export default function AdminCustomers() {
                   </TableRow>
                 ) : customers?.content.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                    <TableCell
+                      colSpan={8}
+                      className="text-center py-8 text-gray-500"
+                    >
                       Không có dữ liệu
                     </TableCell>
                   </TableRow>
@@ -250,23 +339,37 @@ export default function AdminCustomers() {
                         <div className="flex items-center space-x-3">
                           <Avatar className="w-8 h-8">
                             <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                            <AvatarFallback>{customer.name.charAt(0)}</AvatarFallback>
+                            <AvatarFallback>
+                              {customer.name.charAt(0)}
+                            </AvatarFallback>
                           </Avatar>
                           <div>
                             <div className="font-medium">{customer.name}</div>
-                            <div className="text-sm text-gray-500">{customer.id}</div>
+                            <div className="text-sm text-gray-500">
+                              {customer.id}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
                           <div className="text-sm">{customer.email}</div>
-                          <div className="text-sm text-gray-500">{customer.phone}</div>
+                          <div className="text-sm text-gray-500">
+                            {customer.phone}
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell>{new Date(customer.createdAt).toLocaleDateString("vi-VN")}</TableCell>
-                      <TableCell className="font-medium">{customer.totalBookings}</TableCell>
-                      <TableCell className="font-medium">{formatCurrency(customer.totalSpent)}</TableCell>
+                      <TableCell>
+                        {new Date(customer.createdAt).toLocaleDateString(
+                          "vi-VN"
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {customer.totalBookings}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {formatCurrency(customer.totalSpent)}
+                      </TableCell>
                       <TableCell>{getTierBadge(customer.tier)}</TableCell>
                       <TableCell>{getStatusBadge(customer.status)}</TableCell>
                       <TableCell>
@@ -277,16 +380,20 @@ export default function AdminCustomers() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewCustomer(customer)}>
+                            <DropdownMenuItem
+                              onClick={() => handleViewCustomer(customer)}
+                            >
                               <Eye className="mr-2 h-4 w-4" />
                               Xem chi tiết
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEditCustomer(customer)}>
+                            <DropdownMenuItem
+                              onClick={() => handleEditCustomer(customer)}
+                            >
                               <Edit className="mr-2 h-4 w-4" />
                               Chỉnh sửa
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-red-600" 
+                            <DropdownMenuItem
+                              className="text-red-600"
                               onClick={() => handleDeleteCustomer(customer)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -319,7 +426,11 @@ export default function AdminCustomers() {
           </span>
           <Button
             variant="outline"
-            onClick={() => setCurrentPage(Math.min(customers.totalPages - 1, currentPage + 1))}
+            onClick={() =>
+              setCurrentPage(
+                Math.min(customers.totalPages - 1, currentPage + 1)
+              )
+            }
             disabled={currentPage >= customers.totalPages - 1}
           >
             Trang sau
@@ -346,8 +457,8 @@ export default function AdminCustomers() {
         open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
         onEdit={() => {
-          setDetailDialogOpen(false)
-          setEditDialogOpen(true)
+          setDetailDialogOpen(false);
+          setEditDialogOpen(true);
         }}
       />
 
@@ -356,7 +467,7 @@ export default function AdminCustomers() {
           <AlertDialogHeader>
             <AlertDialogTitle>Xác nhận xóa</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc chắn muốn xóa khách hàng "{selectedCustomer?.name}"? 
+              Bạn có chắc chắn muốn xóa khách hàng "{selectedCustomer?.name}"?
               Hành động này sẽ vô hiệu hóa tài khoản và không thể hoàn tác.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -367,5 +478,5 @@ export default function AdminCustomers() {
         </AlertDialogContent>
       </AlertDialog>
     </AdminLayout>
-  )
+  );
 }

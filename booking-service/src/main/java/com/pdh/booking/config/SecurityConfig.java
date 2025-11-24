@@ -32,7 +32,7 @@ public class SecurityConfig {
                         .requestMatchers("/backoffice/**").hasAnyRole("ADMIN")
                         .requestMatchers("/storefront/**", "/bookings/queries/**") .hasAnyRole("CUSTOMER", "ADMIN")
                         .anyRequest().authenticated())
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.ignoringRequestMatchers( "/mcp/**"))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .build();
     }

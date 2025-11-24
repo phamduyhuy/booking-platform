@@ -10,7 +10,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -76,16 +75,16 @@ public class FlightBookingDetailsDto {
     private Double destinationLongitude;
     
     /**
-     * Departure date and time
+     * Departure date and time (ISO 8601 format with timezone, e.g., "2025-11-16T20:45:00+07:00")
      */
     @NotNull(message = "Departure date is required")
-    private LocalDateTime departureDateTime;
+    private String departureDateTime;
     
     /**
-     * Arrival date and time
+     * Arrival date and time (ISO 8601 format with timezone, e.g., "2025-11-16T22:20:00+07:00")
      */
     @NotNull(message = "Arrival date is required")
-    private LocalDateTime arrivalDateTime;
+    private String arrivalDateTime;
     
     /**
      * Seat class (ECONOMY, BUSINESS, FIRST)

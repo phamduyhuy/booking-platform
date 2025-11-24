@@ -10,9 +10,10 @@ import type {
 export interface FlightScheduleListParams {
   page?: number;
   size?: number;
-  flightId?: number;
-  status?: string;
+  search?: string; // Unified search for flight number and airports
   date?: string; // YYYY-MM-DD format
+  departureAirportId?: number; // Filter by departure airport
+  arrivalAirportId?: number; // Filter by arrival airport
 }
 
 export interface FlightScheduleStatistics {
@@ -126,9 +127,10 @@ export class FlightScheduleService {
       
       if (params?.page !== undefined) searchParams.append("page", params.page.toString());
       if (params?.size !== undefined) searchParams.append("size", params.size.toString());
-      if (params?.flightId !== undefined) searchParams.append("flightId", params.flightId.toString());
-      if (params?.status) searchParams.append("status", params.status);
+      if (params?.search) searchParams.append("search", params.search);
       if (params?.date) searchParams.append("date", params.date);
+      if (params?.departureAirportId) searchParams.append("departureAirportId", params.departureAirportId.toString());
+      if (params?.arrivalAirportId) searchParams.append("arrivalAirportId", params.arrivalAirportId.toString());
 
       const url = `${this.BASE_PATH}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
       const response: ApiResponse<any> = await apiClient.get(url);

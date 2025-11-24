@@ -8,9 +8,11 @@ import com.pdh.booking.command.handler.ProcessPaymentCommandHandler;
 import com.pdh.booking.command.handler.CancelBookingCommandHandler;
 import com.pdh.booking.model.Booking;
 import com.pdh.booking.query.GetBookingByIdQuery;
+import com.pdh.booking.query.GetBookingByReferenceQuery;
 import com.pdh.booking.query.GetBookingBySagaIdQuery;
 import com.pdh.booking.query.GetUserBookingsQuery;
 import com.pdh.booking.query.handler.GetBookingByIdQueryHandler;
+import com.pdh.booking.query.handler.GetBookingByReferenceQueryHandler;
 import com.pdh.booking.query.handler.GetBookingBySagaIdQueryHandler;
 import com.pdh.booking.query.handler.GetUserBookingsQueryHandler;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ public class BookingCqrsService {
     
     // Query handlers
     private final GetBookingByIdQueryHandler getBookingByIdQueryHandler;
+    private final GetBookingByReferenceQueryHandler getBookingByReferenceQueryHandler;
     private final GetBookingBySagaIdQueryHandler getBookingBySagaIdQueryHandler;
     private final GetUserBookingsQueryHandler getUserBookingsQueryHandler;
     
@@ -89,6 +92,29 @@ public class BookingCqrsService {
                 .userId(userId)
                 .build();
         return getBookingByIdQueryHandler.handle(query);
+    }
+    
+    /**
+     * Get booking by reference code
+     */
+    public Optional<Booking> getBookingByReference(String bookingReference) {
+        log.debug("Getting booking by reference: {}", bookingReference);
+        GetBookingByReferenceQuery query = GetBookingByReferenceQuery.builder()
+                .bookingReference(bookingReference)
+                .build();
+        return getBookingByReferenceQueryHandler.handle(query);
+    }
+    
+    /**
+     * Get booking by reference code with user authorization
+     */
+    public Optional<Booking> getBookingByReference(String bookingReference, UUID userId) {
+        log.debug("Getting booking by reference: {} for user: {}", bookingReference, userId);
+        GetBookingByReferenceQuery query = GetBookingByReferenceQuery.builder()
+                .bookingReference(bookingReference)
+                .userId(userId)
+                .build();
+        return getBookingByReferenceQueryHandler.handle(query);
     }
     
     /**

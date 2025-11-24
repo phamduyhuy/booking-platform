@@ -1,21 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import { createRoot, type Root } from 'react-dom/client';
-import { Plane, Hotel as HotelIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useCallback, useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import { createRoot, type Root } from "react-dom/client";
+import { Plane, Hotel as HotelIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Import Mapbox CSS
-import 'mapbox-gl/dist/mapbox-gl.css';
-import { env } from '@/env.mjs';
+import "mapbox-gl/dist/mapbox-gl.css";
+import { env } from "@/env.mjs";
 
 export interface MapLocation {
   id: string;
   name: string;
   latitude: number;
   longitude: number;
-  type?: 'hotel' | 'airport' | 'destination' | 'custom';
+  type?: "hotel" | "airport" | "destination" | "custom";
   description?: string;
   price?: string;
   image?: string;
@@ -32,7 +32,7 @@ export interface MapJourney {
     longitude: number;
   };
   color?: string;
-  travelMode?: 'flight' | 'drive' | 'train' | 'custom';
+  travelMode?: "flight" | "drive" | "train" | "custom";
   animate?: boolean;
   pathCoordinates?: [number, number][];
   markerLabel?: string;
@@ -66,10 +66,12 @@ type JourneyController = {
   currentIndex: number;
   layerId: string;
   sourceId: string;
-  travelMode?: MapJourney['travelMode'];
+  travelMode?: MapJourney["travelMode"];
 };
 
-const DEFAULT_CENTER: [number, number] = [106.80337596151362, 10.870060732280548];
+const DEFAULT_CENTER: [number, number] = [
+  106.80337596151362, 10.870060732280548,
+];
 const DEFAULT_JOURNEY_DURATION = 15000;
 const DEFAULT_JOURNEY_STEPS = 420;
 
@@ -86,14 +88,19 @@ const calculateBearing = (from: [number, number], to: [number, number]) => {
   const φ2 = toRadians(toLat);
   const Δλ = toRadians(toLng - fromLng);
   const y = Math.sin(Δλ) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
   const θ = Math.atan2(y, x);
   return (toDegrees(θ) + 360) % 360;
 };
 
-const isFiniteCoordinate = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isFiniteCoordinate = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
 
-const computeControlPoint = (origin: [number, number], destination: [number, number]) => {
+const computeControlPoint = (
+  origin: [number, number],
+  destination: [number, number]
+) => {
   const [originLng, originLat] = origin;
   const [destinationLng, destinationLat] = destination;
   const midLng = (originLng + destinationLng) / 2;
@@ -107,8 +114,17 @@ const computeControlPoint = (origin: [number, number], destination: [number, num
   return [midLng + offsetLng, midLat + offsetLat] as [number, number];
 };
 
-const generateArc = (origin: [number, number], destination: [number, number], steps = DEFAULT_JOURNEY_STEPS) => {
-  if (!isFiniteCoordinate(origin[0]) || !isFiniteCoordinate(origin[1]) || !isFiniteCoordinate(destination[0]) || !isFiniteCoordinate(destination[1])) {
+const generateArc = (
+  origin: [number, number],
+  destination: [number, number],
+  steps = DEFAULT_JOURNEY_STEPS
+) => {
+  if (
+    !isFiniteCoordinate(origin[0]) ||
+    !isFiniteCoordinate(origin[1]) ||
+    !isFiniteCoordinate(destination[0]) ||
+    !isFiniteCoordinate(destination[1])
+  ) {
     return [] as [number, number][];
   }
 
@@ -122,8 +138,14 @@ const generateArc = (origin: [number, number], destination: [number, number], st
   for (let step = 0; step <= steps; step += 1) {
     const t = step / steps;
     const oneMinusT = 1 - t;
-    const lng = oneMinusT * oneMinusT * origin[0] + 2 * oneMinusT * t * control[0] + t * t * destination[0];
-    const lat = oneMinusT * oneMinusT * origin[1] + 2 * oneMinusT * t * control[1] + t * t * destination[1];
+    const lng =
+      oneMinusT * oneMinusT * origin[0] +
+      2 * oneMinusT * t * control[0] +
+      t * t * destination[0];
+    const lat =
+      oneMinusT * oneMinusT * origin[1] +
+      2 * oneMinusT * t * control[1] +
+      t * t * destination[1];
     coordinates.push([lng, lat]);
   }
 
@@ -133,13 +155,24 @@ const generateArc = (origin: [number, number], destination: [number, number], st
 interface FlightMarkerProps {
   bearing: number;
   label?: string;
-  status?: 'active' | 'idle';
+  status?: "active" | "idle";
 }
 
-const FlightMarker = ({ bearing, label, status = 'active' }: FlightMarkerProps) => {
+const FlightMarker = ({
+  bearing,
+  label,
+  status = "active",
+}: FlightMarkerProps) => {
   return (
-    <div className={`flight-marker-root ${status === 'idle' ? 'flight-marker-root--idle' : ''}`}>
-      <div className="flight-marker-plane" style={{ transform: `rotate(${bearing}deg)` }}>
+    <div
+      className={`flight-marker-root ${
+        status === "idle" ? "flight-marker-root--idle" : ""
+      }`}
+    >
+      <div
+        className="flight-marker-plane"
+        style={{ transform: `rotate(${bearing}deg)` }}
+      >
         <Plane className="h-4 w-4" />
       </div>
       {label ? <span className="flight-marker-label">{label}</span> : null}
@@ -163,29 +196,29 @@ const HotelMarker = ({ title, price }: HotelMarkerProps) => {
   );
 };
 
-const markerIconForType = (type?: MapLocation['type']) => {
+const markerIconForType = (type?: MapLocation["type"]) => {
   switch (type) {
-    case 'hotel':
-      return 'fas fa-bed';
-    case 'airport':
-      return 'fas fa-plane';
-    case 'destination':
-      return 'fas fa-map-marker-alt';
+    case "hotel":
+      return "fas fa-bed";
+    case "airport":
+      return "fas fa-plane";
+    case "destination":
+      return "fas fa-map-marker-alt";
     default:
-      return 'fas fa-map-marker-alt';
+      return "fas fa-map-marker-alt";
   }
 };
 
-const markerColorForType = (type?: MapLocation['type']) => {
+const markerColorForType = (type?: MapLocation["type"]) => {
   switch (type) {
-    case 'hotel':
-      return 'marker-hotel';
-    case 'airport':
-      return 'marker-airport';
-    case 'destination':
-      return 'marker-destination';
+    case "hotel":
+      return "marker-hotel";
+    case "airport":
+      return "marker-airport";
+    case "destination":
+      return "marker-destination";
     default:
-      return 'marker-default';
+      return "marker-default";
   }
 };
 
@@ -197,7 +230,11 @@ const buildMarkerHTML = (location: MapLocation): string => {
       <div class="marker-container ${colorClass} hover:scale-110 transition-transform cursor-pointer">
         <div class="marker-content">
           <i class="${iconClass}"></i>
-          ${location.price ? `<span class="marker-price">${location.price}</span>` : ''}
+          ${
+            location.price
+              ? `<span class="marker-price">${location.price}</span>`
+              : ""
+          }
         </div>
       </div>
     `;
@@ -206,17 +243,33 @@ const buildMarkerHTML = (location: MapLocation): string => {
 const buildPopupHTML = (location: MapLocation): string => {
   return `
       <div class="popup-content">
-        ${location.image ? `<img src="${location.image}" alt="${location.name}" class="popup-image" />` : ''}
+        ${
+          location.image
+            ? `<img src="${location.image}" alt="${location.name}" class="popup-image" />`
+            : ""
+        }
         <div class="popup-body">
           <h3 class="popup-title">${location.name}</h3>
-          ${location.description ? `<p class="popup-description">${location.description}</p>` : ''}
-          ${location.price ? `<div class="popup-price">${location.price}</div>` : ''}
+          ${
+            location.description
+              ? `<p class="popup-description">${location.description}</p>`
+              : ""
+          }
+          ${
+            location.price
+              ? `<div class="popup-price">${location.price}</div>`
+              : ""
+          }
         </div>
       </div>
     `;
 };
 
-const createExtrusionPolygon = (longitude: number, latitude: number, size = 0.00035) => {
+const createExtrusionPolygon = (
+  longitude: number,
+  latitude: number,
+  size = 0.00035
+) => {
   const lngOffset = size;
   const latOffset = size * Math.cos((latitude * Math.PI) / 180);
   return [
@@ -234,30 +287,32 @@ export function MapboxMap({
   journeys = [],
   center = DEFAULT_CENTER,
   zoom = 10,
-  style = 'mapbox://styles/phamduyhuy/cmgnvl0ec00ud01se98ju3a80',
+  style = "mapbox://styles/phamduyhuy/cmgnvl0ec00ud01se98ju3a80",
   showControls = true,
   onLocationClick,
   onMapLoad,
   interactive = true,
-  height = "100vh"
+  height = "100vh",
 }: MapboxMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Array<{ marker: mapboxgl.Marker; root?: Root }>>([]);
   const journeyControllers = useRef<Record<string, JourneyController>>({});
-  const hotelStructures = useRef<Record<string, { sourceId: string; layerId: string }>>({});
+  const hotelStructures = useRef<
+    Record<string, { sourceId: string; layerId: string }>
+  >({});
   const [isLoaded, setIsLoaded] = useState(false);
 
   const applyGlobeProjection = useCallback(() => {
     const mapInstance = map.current;
-    if (!mapInstance || typeof mapInstance.setProjection !== 'function') {
+    if (!mapInstance || typeof mapInstance.setProjection !== "function") {
       return;
     }
 
     try {
-      mapInstance.setProjection('globe');
+      mapInstance.setProjection("globe");
     } catch (error) {
-      console.warn('Failed to apply globe projection', error);
+      console.warn("Failed to apply globe projection", error);
     }
   }, []);
 
@@ -265,6 +320,7 @@ export function MapboxMap({
     if (!map.current || !location.id) return;
 
     const mapInstance = map.current;
+    if (!mapInstance.isStyleLoaded()) return;
     const sourceId = `hotel-structure-source-${location.id}`;
     const layerId = `hotel-structure-layer-${location.id}`;
 
@@ -276,38 +332,41 @@ export function MapboxMap({
       mapInstance.removeSource(sourceId);
     }
 
-    const coordinates = createExtrusionPolygon(location.longitude, location.latitude);
+    const coordinates = createExtrusionPolygon(
+      location.longitude,
+      location.latitude
+    );
 
     const feature: GeoJSON.Feature<GeoJSON.Polygon> = {
-      type: 'Feature',
+      type: "Feature",
       properties: {
         name: location.name,
         base_height: 0,
         height: 80,
       },
       geometry: {
-        type: 'Polygon',
+        type: "Polygon",
         coordinates: [coordinates],
       },
     };
 
     mapInstance.addSource(sourceId, {
-      type: 'geojson',
+      type: "geojson",
       data: {
-        type: 'FeatureCollection',
+        type: "FeatureCollection",
         features: [feature],
       },
     });
 
     mapInstance.addLayer({
       id: layerId,
-      type: 'fill-extrusion',
+      type: "fill-extrusion",
       source: sourceId,
       paint: {
-        'fill-extrusion-color': '#0ea5e9',
-        'fill-extrusion-height': ['get', 'height'],
-        'fill-extrusion-base': ['get', 'base_height'],
-        'fill-extrusion-opacity': 0.8,
+        "fill-extrusion-color": "#0ea5e9",
+        "fill-extrusion-height": ["get", "height"],
+        "fill-extrusion-base": ["get", "base_height"],
+        "fill-extrusion-opacity": 0.8,
       },
     });
 
@@ -319,9 +378,11 @@ export function MapboxMap({
     if (!mapContainer.current || map.current) return;
 
     // Get API key from environment variables
-    const apiKey = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
+    const apiKey = env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
     if (!apiKey) {
-      console.error('Mapbox API key not found. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your environment variables.');
+      console.error(
+        "Mapbox API key not found. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your environment variables."
+      );
       return;
     }
 
@@ -331,10 +392,10 @@ export function MapboxMap({
       style,
       center,
       zoom,
-      interactive
+      interactive,
     });
 
-    map.current.on('load', () => {
+    map.current.on("load", () => {
       applyGlobeProjection();
       setIsLoaded(true);
       if (onMapLoad && map.current) {
@@ -355,23 +416,35 @@ export function MapboxMap({
         root?.unmount();
       });
       markers.current = [];
-      Object.values(hotelStructures.current).forEach(({ sourceId, layerId }) => {
-        if (map.current?.getLayer(layerId)) {
-          map.current.removeLayer(layerId);
+      Object.values(hotelStructures.current).forEach(
+        ({ sourceId, layerId }) => {
+          if (map.current?.getLayer(layerId)) {
+            map.current.removeLayer(layerId);
+          }
+          if (map.current?.getSource(sourceId)) {
+            map.current.removeSource(sourceId);
+          }
         }
-        if (map.current?.getSource(sourceId)) {
-          map.current.removeSource(sourceId);
-        }
-      });
+      );
       hotelStructures.current = {};
-      Object.values(journeyControllers.current).forEach(controller => controller.cleanup());
+      Object.values(journeyControllers.current).forEach((controller) =>
+        controller.cleanup()
+      );
       journeyControllers.current = {};
       if (map.current) {
         map.current.remove();
         map.current = null;
       }
     };
-  }, [center, zoom, style, showControls, interactive, onMapLoad, applyGlobeProjection]);
+  }, [
+    center,
+    zoom,
+    style,
+    showControls,
+    interactive,
+    onMapLoad,
+    applyGlobeProjection,
+  ]);
 
   useEffect(() => {
     if (!map.current) return;
@@ -384,11 +457,11 @@ export function MapboxMap({
       setIsLoaded(true);
     };
 
-    mapInstance.once('styledata', handleStyleLoad);
+    mapInstance.once("styledata", handleStyleLoad);
     mapInstance.setStyle(style);
 
     return () => {
-      mapInstance.off('styledata', handleStyleLoad);
+      mapInstance.off("styledata", handleStyleLoad);
     };
   }, [style, applyGlobeProjection]);
 
@@ -407,6 +480,7 @@ export function MapboxMap({
   // Update markers when locations change
   useEffect(() => {
     if (!map.current || !isLoaded) return;
+    if (!map.current.isStyleLoaded()) return;
 
     // Clear existing markers
     markers.current.forEach(({ marker, root }) => {
@@ -425,31 +499,28 @@ export function MapboxMap({
     hotelStructures.current = {};
 
     // Add new markers
-    locations.forEach(location => {
+    locations.forEach((location) => {
       if (!map.current) return;
 
       // Create marker element
-      const markerElement = document.createElement('div');
+      const markerElement = document.createElement("div");
       let markerRoot: Root | undefined;
 
-      if (location.type === 'hotel') {
-        markerElement.className = 'custom-marker hotel-custom-marker';
+      if (location.type === "hotel") {
+        markerElement.className = "custom-marker hotel-custom-marker";
         markerRoot = createRoot(markerElement);
         markerRoot.render(
-          <HotelMarker
-            title={location.name}
-            price={location.price}
-          />
+          <HotelMarker title={location.name} price={location.price} />
         );
       } else {
-        markerElement.className = 'custom-marker';
+        markerElement.className = "custom-marker";
         markerElement.innerHTML = buildMarkerHTML(location);
       }
 
       // Create marker
       const marker = new mapboxgl.Marker({
         element: markerElement,
-        anchor: 'bottom'
+        anchor: "bottom",
       })
         .setLngLat([location.longitude, location.latitude])
         .addTo(map.current);
@@ -458,19 +529,19 @@ export function MapboxMap({
       const popup = new mapboxgl.Popup({
         offset: 25,
         closeButton: true,
-        closeOnClick: false
+        closeOnClick: false,
       }).setHTML(buildPopupHTML(location));
 
       marker.setPopup(popup);
 
       // Add click handler
-      markerElement.addEventListener('click', () => {
+      markerElement.addEventListener("click", () => {
         if (onLocationClick) {
           onLocationClick(location);
         }
       });
 
-      if (location.type === 'hotel') {
+      if (location.type === "hotel") {
         addHotelExtrusion(location);
       }
 
@@ -479,7 +550,9 @@ export function MapboxMap({
 
     // Fit map to markers if multiple locations
     if (locations.length > 1 && map.current) {
-      const coordinates = locations.map(loc => [loc.longitude, loc.latitude] as [number, number]);
+      const coordinates = locations.map(
+        (loc) => [loc.longitude, loc.latitude] as [number, number]
+      );
       const bounds = coordinates.reduce((bounds, coord) => {
         return bounds.extend(coord);
       }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
@@ -491,46 +564,61 @@ export function MapboxMap({
   // Effect to draw journeys with animated flight routes
   useEffect(() => {
     if (!map.current || !isLoaded) return;
+    if (!map.current.isStyleLoaded()) return;
 
     const mapInstance = map.current;
-    const nextJourneyIds = new Set(journeys.map(journey => journey.id));
+    const nextJourneyIds = new Set(journeys.map((journey) => journey.id));
 
     // Clean up controllers that are no longer required
-    Object.entries(journeyControllers.current).forEach(([journeyId, controller]) => {
-      if (!nextJourneyIds.has(journeyId)) {
-        controller.cleanup();
-        delete journeyControllers.current[journeyId];
+    Object.entries(journeyControllers.current).forEach(
+      ([journeyId, controller]) => {
+        if (!nextJourneyIds.has(journeyId)) {
+          controller.cleanup();
+          delete journeyControllers.current[journeyId];
+        }
       }
-    });
+    );
 
     const createdControllers: JourneyController[] = [];
 
-    journeys.forEach(journey => {
+    journeys.forEach((journey) => {
       // Remove any existing controller so we can recreate with latest configuration
       if (journeyControllers.current[journey.id]) {
         journeyControllers.current[journey.id]?.cleanup();
         delete journeyControllers.current[journey.id];
       }
 
-      const origin: [number, number] = [journey.origin.longitude, journey.origin.latitude];
-      const destination: [number, number] = [journey.destination.longitude, journey.destination.latitude];
+      const origin: [number, number] = [
+        journey.origin.longitude,
+        journey.origin.latitude,
+      ];
+      const destination: [number, number] = [
+        journey.destination.longitude,
+        journey.destination.latitude,
+      ];
 
-      if (!isFiniteCoordinate(origin[0]) || !isFiniteCoordinate(origin[1]) || !isFiniteCoordinate(destination[0]) || !isFiniteCoordinate(destination[1])) {
+      if (
+        !isFiniteCoordinate(origin[0]) ||
+        !isFiniteCoordinate(origin[1]) ||
+        !isFiniteCoordinate(destination[0]) ||
+        !isFiniteCoordinate(destination[1])
+      ) {
         return;
       }
 
-      const coordinates = journey.pathCoordinates && journey.pathCoordinates.length > 1
-        ? journey.pathCoordinates
-        : generateArc(origin, destination);
+      const coordinates =
+        journey.pathCoordinates && journey.pathCoordinates.length > 1
+          ? journey.pathCoordinates
+          : generateArc(origin, destination);
 
       if (coordinates.length < 2) {
         return;
       }
 
-      const travelMode = journey.travelMode ?? 'flight';
-      const shouldAnimate = journey.animate ?? travelMode === 'flight';
+      const travelMode = journey.travelMode ?? "flight";
+      const shouldAnimate = journey.animate ?? travelMode === "flight";
       const durationMs = journey.durationMs ?? DEFAULT_JOURNEY_DURATION;
-      const color = journey.color || '#2563eb';
+      const color = journey.color || "#2563eb";
 
       const sourceId = `journey-source-${journey.id}`;
       const layerId = `journey-layer-${journey.id}`;
@@ -544,11 +632,11 @@ export function MapboxMap({
       }
 
       mapInstance.addSource(sourceId, {
-        type: 'geojson',
+        type: "geojson",
         data: {
-          type: 'Feature',
+          type: "Feature",
           geometry: {
-            type: 'LineString',
+            type: "LineString",
             coordinates,
           },
           properties: {},
@@ -557,22 +645,22 @@ export function MapboxMap({
 
       mapInstance.addLayer({
         id: layerId,
-        type: 'line',
+        type: "line",
         source: sourceId,
         layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
+          "line-join": "round",
+          "line-cap": "round",
         },
         paint: {
-          'line-color': color,
-          'line-width': travelMode === 'flight' ? 3 : 2,
-          'line-opacity': 0.85,
-          'line-dasharray': travelMode === 'flight' ? [1, 1.4] : [2, 2],
-          'line-blur': 0.2,
+          "line-color": color,
+          "line-width": travelMode === "flight" ? 3 : 2,
+          "line-opacity": 0.85,
+          "line-dasharray": travelMode === "flight" ? [1, 1.4] : [2, 2],
+          "line-blur": 0.2,
         },
       });
 
-      if (travelMode !== 'flight') {
+      if (travelMode !== "flight") {
         const controller: JourneyController = {
           id: journey.id,
           map: mapInstance,
@@ -597,13 +685,25 @@ export function MapboxMap({
         return;
       }
 
-      const markerElement = document.createElement('div');
-      markerElement.className = 'journey-flight-marker';
+      const markerElement = document.createElement("div");
+      markerElement.className = "journey-flight-marker";
       const markerRoot = createRoot(markerElement);
-      const initialBearing = calculateBearing(coordinates[0], coordinates[1] ?? coordinates[0]);
-      markerRoot.render(<FlightMarker bearing={initialBearing} label={journey.markerLabel} status="active" />);
+      const initialBearing = calculateBearing(
+        coordinates[0],
+        coordinates[1] ?? coordinates[0]
+      );
+      markerRoot.render(
+        <FlightMarker
+          bearing={initialBearing}
+          label={journey.markerLabel}
+          status="active"
+        />
+      );
 
-      const marker = new mapboxgl.Marker({ element: markerElement, anchor: 'center' })
+      const marker = new mapboxgl.Marker({
+        element: markerElement,
+        anchor: "center",
+      })
         .setLngLat(coordinates[0])
         .addTo(mapInstance);
 
@@ -640,7 +740,13 @@ export function MapboxMap({
         const last = coordinates[lastIndex];
         const prev = coordinates[lastIndex - 1] ?? last;
         controller.marker?.setLngLat(last);
-        controller.markerRoot?.render(<FlightMarker bearing={calculateBearing(prev, last)} label={journey.markerLabel} status="idle" />);
+        controller.markerRoot?.render(
+          <FlightMarker
+            bearing={calculateBearing(prev, last)}
+            label={journey.markerLabel}
+            status="idle"
+          />
+        );
         journeyControllers.current[journey.id] = controller;
         createdControllers.push(controller);
         return;
@@ -653,13 +759,22 @@ export function MapboxMap({
 
         const elapsed = timestamp - controller.startTimestamp;
         const progress = Math.min(elapsed / controller.durationMs, 1);
-        const targetIndex = Math.min(coordinates.length - 1, Math.floor(progress * (coordinates.length - 1)));
+        const targetIndex = Math.min(
+          coordinates.length - 1,
+          Math.floor(progress * (coordinates.length - 1))
+        );
 
         if (targetIndex !== controller.currentIndex) {
           const current = coordinates[targetIndex];
           const next = coordinates[targetIndex + 1] ?? coordinates[targetIndex];
           controller.marker?.setLngLat(current);
-          controller.markerRoot?.render(<FlightMarker bearing={calculateBearing(current, next)} label={journey.markerLabel} status={progress >= 1 ? 'idle' : 'active'} />);
+          controller.markerRoot?.render(
+            <FlightMarker
+              bearing={calculateBearing(current, next)}
+              label={journey.markerLabel}
+              status={progress >= 1 ? "idle" : "active"}
+            />
+          );
           controller.currentIndex = targetIndex;
         }
 
@@ -678,17 +793,30 @@ export function MapboxMap({
 
     if (journeys.length > 0) {
       const bounds = journeys.reduce((acc, journey) => {
-        if (isFiniteCoordinate(journey.origin.longitude) && isFiniteCoordinate(journey.origin.latitude)) {
+        if (
+          isFiniteCoordinate(journey.origin.longitude) &&
+          isFiniteCoordinate(journey.origin.latitude)
+        ) {
           acc.extend([journey.origin.longitude, journey.origin.latitude]);
         }
-        if (isFiniteCoordinate(journey.destination.longitude) && isFiniteCoordinate(journey.destination.latitude)) {
-          acc.extend([journey.destination.longitude, journey.destination.latitude]);
+        if (
+          isFiniteCoordinate(journey.destination.longitude) &&
+          isFiniteCoordinate(journey.destination.latitude)
+        ) {
+          acc.extend([
+            journey.destination.longitude,
+            journey.destination.latitude,
+          ]);
         }
         return acc;
       }, new mapboxgl.LngLatBounds());
 
       if (bounds && !bounds.isEmpty()) {
-        mapInstance.fitBounds(bounds, { padding: 80, maxZoom: 7.5, duration: 1200 });
+        mapInstance.fitBounds(bounds, {
+          padding: 80,
+          maxZoom: 7.5,
+          duration: 1200,
+        });
       }
     }
   }, [journeys, isLoaded]);
@@ -699,7 +827,7 @@ export function MapboxMap({
       map.current.flyTo({
         center: [longitude, latitude],
         zoom: zoom || map.current.getZoom(),
-        essential: true
+        essential: true,
       });
     }
   };
@@ -707,21 +835,23 @@ export function MapboxMap({
   const addLocation = (location: MapLocation) => {
     if (!map.current || !isLoaded) return;
 
-    const markerElement = document.createElement('div');
+    const markerElement = document.createElement("div");
     let markerRoot: Root | undefined;
 
-    if (location.type === 'hotel') {
-      markerElement.className = 'custom-marker hotel-custom-marker';
+    if (location.type === "hotel") {
+      markerElement.className = "custom-marker hotel-custom-marker";
       markerRoot = createRoot(markerElement);
-      markerRoot.render(<HotelMarker title={location.name} price={location.price} />);
+      markerRoot.render(
+        <HotelMarker title={location.name} price={location.price} />
+      );
     } else {
-      markerElement.className = 'custom-marker';
+      markerElement.className = "custom-marker";
       markerElement.innerHTML = buildMarkerHTML(location);
     }
 
     const marker = new mapboxgl.Marker({
       element: markerElement,
-      anchor: 'bottom'
+      anchor: "bottom",
     })
       .setLngLat([location.longitude, location.latitude])
       .addTo(map.current);
@@ -729,18 +859,18 @@ export function MapboxMap({
     const popup = new mapboxgl.Popup({
       offset: 25,
       closeButton: true,
-      closeOnClick: false
+      closeOnClick: false,
     }).setHTML(buildPopupHTML(location));
 
     marker.setPopup(popup);
 
-    markerElement.addEventListener('click', () => {
+    markerElement.addEventListener("click", () => {
       if (onLocationClick) {
         onLocationClick(location);
       }
     });
 
-    if (location.type === 'hotel') {
+    if (location.type === "hotel") {
       addHotelExtrusion(location);
     }
 
@@ -750,7 +880,7 @@ export function MapboxMap({
   return (
     <div className={cn("relative w-full h-full", className)} style={{ height }}>
       <div ref={mapContainer} className="w-full h-full" />
-      
+
       {/* Custom CSS for markers */}
       <style jsx global>{`
         .custom-marker {
@@ -814,7 +944,11 @@ export function MapboxMap({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, rgba(37,99,235,0.95), rgba(14,165,233,0.9));
+          background: linear-gradient(
+            135deg,
+            rgba(37, 99, 235, 0.95),
+            rgba(14, 165, 233, 0.9)
+          );
           color: #fff;
           box-shadow: 0 8px 22px rgba(37, 99, 235, 0.45);
           transition: transform 0.12s linear;
@@ -843,7 +977,7 @@ export function MapboxMap({
           border-radius: 50% 50% 50% 0;
           border: 3px solid white;
           transform: rotate(-45deg);
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -868,7 +1002,7 @@ export function MapboxMap({
           border-radius: 4px;
           font-size: 10px;
           white-space: nowrap;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
         }
 
         .marker-hotel {

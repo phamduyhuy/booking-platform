@@ -5,7 +5,6 @@ import java.util.Collections;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
-import dev.langchain4j.model.output.structured.Description;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,27 +17,22 @@ import lombok.NoArgsConstructor;
 public class StructuredResultItem {
     @JsonProperty(required = true, value = "type")
     @JsonPropertyDescription("Type of result: flight, hotel, or info")
-    @Description("Result category such as flight, hotel, itinerary, info_card, weather, or destination.")
     private String type;
     
     @JsonProperty(required = true, value = "title")
     @JsonPropertyDescription("Main title or heading for the result")
-    @Description("Human readable headline describing the result, e.g. flight route or hotel name.")
     private String title;
     
     @JsonProperty(required = true, value = "subtitle")
     @JsonPropertyDescription("Secondary text or brief description")
-    @Description("One line supporting detail such as schedule, location, or summary of the result.")
     private String subtitle;
     
     @JsonProperty(required = false, value = "description")
     @JsonPropertyDescription("Detailed description of the result")
-    @Description("Longer narrative or explanation with highlights, cancellation rules, or booking tips.")
     private String description;
     
     @JsonProperty(required = false, value = "imageUrl")
     @JsonPropertyDescription("Optional URL to an image representing this result, example: hotel photo, airline logo, destination image or result from mapbox static_map_image_tool")
-    @Description("URL pointing to an illustrative image such as destination photo, airline logo, or map snapshot.")
     private String imageUrl;
     
     @JsonProperty(required = true, value = "ids")

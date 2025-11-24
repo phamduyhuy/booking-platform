@@ -21,6 +21,7 @@ interface UseAiChatReturn {
     loadChatHistory: () => Promise<void>;
     suggestions: string[];
     getSuggestions: () => Promise<void>;
+    handleConfirmation: (confirmed: boolean, confirmationContext?: any) => Promise<void>;
 }
 
 interface ParsedStructuredPayload {
@@ -329,6 +330,8 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
                 },
             });
 
+            console.log('✅ WebSocket stream completed successfully');
+
             const responseConversationId = finalResponse.conversationId ?? effectiveConversationId;
 
             if (conversationId !== responseConversationId) {
@@ -368,10 +371,14 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
                 console.error('Failed to refresh conversations:', err);
             });
         } catch (err: any) {
+            console.error('⚠️ WebSocket failed, attempting REST fallback...',error);
+            
             try {
                 const fallbackResponse = await aiChatService.sendPromptRest(trimmedMessage, {
                     conversationId: effectiveConversationId,
                 });
+
+                console.log('✅ REST fallback succeeded');
 
                 const responseConversationId = fallbackResponse.conversationId ?? effectiveConversationId;
                 const fallbackTimestampIso = fallbackResponse.timestamp ?? new Date().toISOString();
@@ -416,6 +423,8 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
 
                 return;
             } catch (fallbackErr: any) {
+                console.error('❌ REST fallback also failed:', fallbackErr);
+                
                 const fallbackTimestamp = new Date();
                 const errorMessage = fallbackErr?.message || err?.message || 'Không thể gửi tin nhắn. Vui lòng thử lại.';
                 setError(errorMessage);
@@ -487,6 +496,12 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
         }
     }, [conversationId, context]);
 
+    const handleConfirmation = useCallback(async (confirmed: boolean, confirmationContext?: any) => {
+        const message = confirmed ? 'Yes' : 'Cancel';
+        console.log('Sending confirmation:', message, confirmationContext);
+        await sendMessage(message);
+    }, [sendMessage]);
+
     return {
         messages,
         isLoading,
@@ -498,5 +513,6 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
         loadChatHistory,
         suggestions,
         getSuggestions,
+        handleConfirmation,
     };
 }

@@ -93,7 +93,11 @@ spring:
         version: 1.0.0
         type: sync
         base-url: /payments
-
+        capabilities:
+          prompt: false
+          completion: false
+          resource: false
+          tool: true
   security:
     oauth2:
       resourceserver:
@@ -139,7 +143,7 @@ spring:
       server:
         enabled: true
         stdio: false
-        name: booking-mcp-server
+        name: payments-mcp-server
         version: 1.0.0
         type: sync
         base-url: /payments

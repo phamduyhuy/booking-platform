@@ -52,13 +52,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(
             1,
-            new ChatSocketThreadFactory("chat-heartbeat")
-    );
+            new ChatSocketThreadFactory("chat-heartbeat"));
 
     private final ScheduledExecutorService workerPool = Executors.newScheduledThreadPool(
             Runtime.getRuntime().availableProcessors(),
-            new ChatSocketThreadFactory("chat-worker")
-    );
+            new ChatSocketThreadFactory("chat-worker"));
 
     private final Map<String, ScheduledFuture<?>> heartbeatRegistrations = new ConcurrentHashMap<>();
     private final reactor.core.scheduler.Scheduler workerScheduler = Schedulers.fromExecutor(workerPool);
@@ -86,12 +84,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        String userId = resolveUserId(session).orElse(null);
-        if (!StringUtils.hasText(userId)) {
+        // Get username for conversationId formatting (username:convId)
+        String username = resolveUserId(session).orElse(null);
+        if (!StringUtils.hasText(username)) {
             log.warn("⚠️ [AI-WS] Missing authenticated user, sessionId={}", session.getId());
+            // DEBUG: Send detailed error
             safeSend(session, buildErrorResponse(socketRequest.getRequestId(),
-                    "Authentication is required to use the AI assistant.", socketRequest.getConversationId(), null));
+                    "DEBUG: Auth failed. Missing 'username'. Session attributes: " + session.getAttributes().keySet(),
+                    socketRequest.getConversationId(), null));
             session.close(CloseStatus.NOT_ACCEPTABLE.withReason("Authentication required"));
+            return;
+        }
+
+        // Get userId (UUID) from JWT for MCP tools
+        String userId = resolveUserIdFromJwt(session).orElse(null);
+        if (!StringUtils.hasText(userId)) {
+            log.warn("⚠️ [AI-WS] Missing userId (JWT sub) from session, sessionId={}", session.getId());
+            // DEBUG: Send detailed error
+            safeSend(session, buildErrorResponse(socketRequest.getRequestId(),
+                    "DEBUG: Auth failed. Missing 'userId' (sub). username=" + username,
+                    socketRequest.getConversationId(), username));
+            session.close(CloseStatus.NOT_ACCEPTABLE.withReason("Invalid token"));
             return;
         }
 
@@ -113,7 +126,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .type(ResponseType.PROCESSING)
                 .requestId(requestId)
                 .conversationId(conversationId)
-                .userId(userId)
+                .userId(username) // Display username in response
                 .userMessage(socketRequest.getMessage())
                 .status("Processing")
                 .timestamp(LocalDateTime.now())
@@ -124,72 +137,76 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .conversationId(conversationId)
                 .message(socketRequest.getMessage())
                 .timestamp(socketRequest.getTimestamp())
-                .mode("stream")
+                .mode("sync")
                 .build();
 
-        java.util.concurrent.atomic.AtomicReference<StructuredChatPayload> latest = new java.util.concurrent.atomic.AtomicReference<>();
+        // Start periodic keep-alive to prevent timeout during long AI processing
+        ScheduledFuture<?> keepAlive = workerPool.scheduleAtFixedRate(() -> {
+            if (session.isOpen()) {
+                ChatMessageResponse keepAliveMsg = ChatMessageResponse.builder()
+                        .type(ResponseType.PROCESSING)
+                        .requestId(requestId)
+                        .conversationId(conversationId)
+                        .userId(username)
+                        .status("Processing... (AI is thinking)")
+                        .timestamp(LocalDateTime.now())
+                        .build();
+                safeSend(session, keepAliveMsg);
+                log.debug("🔄 [AI-WS] Sent keep-alive for requestId={}", requestId);
+            }
+        }, 15, 15, TimeUnit.SECONDS); // Send every 15 seconds
 
-        llmAiService.streamStructured(
-                        chatRequest.getMessage(),
-                        chatRequest.getConversationId(),
-                        userId
-                )
+        // Pass both username (for conversationKey) and userId (UUID for MCP tools) to
+        // LLMAiService
+        reactor.core.publisher.Mono.fromCallable(() -> llmAiService.processStructured(
+                chatRequest.getMessage(),
+                chatRequest.getConversationId(),
+                username, // Username for conversationKey format (username:convId)
+                userId // Real userId (UUID from JWT sub) for MCP tools
+        ))
                 .subscribeOn(workerScheduler)
+                .doFinally(signalType -> {
+                    // Cancel keep-alive when processing completes
+                    keepAlive.cancel(false);
+                    log.debug("🛑 [AI-WS] Cancelled keep-alive for requestId={}", requestId);
+                })
                 .subscribe(
                         payload -> {
-                            latest.set(payload);
-                            ChatMessageResponse response = ChatMessageResponse.builder()
-                                    .type(ResponseType.STREAM_UPDATE)
-                                    .requestId(requestId)
-                                    .conversationId(conversationId)
-                                    .userId(userId)
-                                    .userMessage(socketRequest.getMessage())
-                                    .aiResponse(payload.getMessage())
-                                    .results(payload.getResults())
-                                    .nextRequestSuggestions(extractSuggestions(payload))
-                                    .requiresConfirmation(Boolean.TRUE.equals(payload.getRequiresConfirmation()))
-                                    .confirmationContext(payload.getConfirmationContext())
-                                    .status("Streaming")
-                                    .timestamp(LocalDateTime.now())
-                                    .processingTimeMs(Duration.between(startedAt, Instant.now()).toMillis())
-                                    .build();
-                            safeSend(session, response);
-                        },
-                        throwable -> {
-                            log.error("❌ [AI-WS] Error processing message. requestId={}, conversationId={}, user={}",
-                                    requestId, conversationId, userId, throwable);
-                            safeSend(session, buildErrorResponse(requestId,
-                                    "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
-                                    conversationId,
-                                    userId));
-                        },
-                        () -> {
-                            StructuredChatPayload finalPayload = latest.get();
-                            if (finalPayload == null) {
-                                finalPayload = StructuredChatPayload.builder()
+                            StructuredChatPayload safePayload = payload;
+                            if (safePayload == null) {
+                                safePayload = StructuredChatPayload.builder()
                                         .message("Xin lỗi, tôi không thể tạo phản hồi lúc này.")
                                         .results(List.of())
-                                        .nextRequestSuggestions(new String[0])
                                         .build();
                             }
+
                             ChatMessageResponse response = ChatMessageResponse.builder()
                                     .type(ResponseType.RESPONSE)
                                     .requestId(requestId)
                                     .conversationId(conversationId)
-                                    .userId(userId)
+                                    .userId(username) // Display username
                                     .userMessage(socketRequest.getMessage())
-                                    .aiResponse(finalPayload.getMessage())
-                                    .results(finalPayload.getResults())
-                                    .nextRequestSuggestions(extractSuggestions(finalPayload))
-                                    .requiresConfirmation(Boolean.TRUE.equals(finalPayload.getRequiresConfirmation()))
-                                    .confirmationContext(finalPayload.getConfirmationContext())
+                                    .aiResponse(safePayload.getMessage())
+                                    .results(safePayload.getResults())
+                                    .nextRequestSuggestions(extractSuggestions(safePayload))
+                                    .requiresConfirmation(Boolean.TRUE.equals(safePayload.getRequiresConfirmation()))
+                                    .confirmationContext(safePayload.getConfirmationContext())
                                     .status("Completed")
                                     .timestamp(LocalDateTime.now())
                                     .processingTimeMs(Duration.between(startedAt, Instant.now()).toMillis())
                                     .build();
+
                             safeSend(session, response);
-                        }
-                );
+                        },
+                        throwable -> {
+                            log.error(
+                                    "❌ [AI-WS] Error processing message. requestId={}, conversationId={}, userId={}, username={}",
+                                    requestId, conversationId, userId, username, throwable);
+                            safeSend(session, buildErrorResponse(requestId,
+                                    "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
+                                    conversationId,
+                                    username));
+                        });
     }
 
     private ChatSocketRequest parseRequest(String payload) {
@@ -203,22 +220,32 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private void safeSend(WebSocketSession session, ChatMessageResponse response) {
         if (session == null || !session.isOpen()) {
+            log.warn("⚠️ [AI-WS] Cannot send message - session is null or closed. sessionId={}",
+                    session != null ? session.getId() : "null");
             return;
         }
         try {
             String json = objectMapper.writeValueAsString(response);
             synchronized (session) {
-                session.sendMessage(new TextMessage(json));
+                if (session.isOpen()) { // Double-check before sending
+                    session.sendMessage(new TextMessage(json));
+                    log.debug("✅ [AI-WS] Message sent successfully. sessionId={}, type={}",
+                            session.getId(), response.getType());
+                } else {
+                    log.warn("⚠️ [AI-WS] Session closed while preparing to send. sessionId={}",
+                            session.getId());
+                }
             }
         } catch (IOException e) {
-            log.warn("⚠️ [AI-WS] Failed to send message to sessionId={}: {}", session.getId(), e.getMessage());
+            log.warn("⚠️ [AI-WS] Failed to send message to sessionId={}: {}",
+                    session != null ? session.getId() : "null", e.getMessage());
         }
     }
 
     private ChatMessageResponse buildErrorResponse(String requestId,
-                                                   String message,
-                                                   String conversationId,
-                                                   String userId) {
+            String message,
+            String conversationId,
+            String userId) {
         return ChatMessageResponse.builder()
                 .type(ResponseType.ERROR)
                 .requestId(requestId)
@@ -245,6 +272,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .toList();
     }
 
+    /**
+     * Resolve username (preferred_username) from WebSocket session
+     * This is used for conversationId formatting
+     */
     private Optional<String> resolveUserId(WebSocketSession session) {
         if (session == null) {
             return Optional.empty();
@@ -254,14 +285,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (attributes != null) {
             Object usernameAttr = attributes.get("username");
             if (usernameAttr instanceof String username && StringUtils.hasText(username)) {
-                System.out.println("Found username in attributes: " + username);
+                log.debug("Found username in attributes: {}", username);
                 return Optional.of(username);
             }
             Object jwtAttr = attributes.get("jwt");
             if (jwtAttr instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
                 String preferredUsername = jwt.getClaimAsString("preferred_username");
                 if (StringUtils.hasText(preferredUsername)) {
-                    System.out.println("Found preferred_username in JWT: " + preferredUsername);
+                    log.debug("Found preferred_username in JWT: {}", preferredUsername);
                     return Optional.of(preferredUsername);
                 }
             }
@@ -286,6 +317,37 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                         .map(Object::toString));
     }
 
+    /**
+     * Resolve userId (UUID from JWT 'sub' claim) from WebSocket session
+     * This is the actual Keycloak user ID used for MCP tools
+     */
+    private Optional<String> resolveUserIdFromJwt(WebSocketSession session) {
+        if (session == null) {
+            return Optional.empty();
+        }
+
+        Map<String, Object> attributes = session.getAttributes();
+        if (attributes != null) {
+            Object jwtAttr = attributes.get("jwt");
+            if (jwtAttr instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+                String subject = jwt.getSubject();
+                if (StringUtils.hasText(subject)) {
+                    log.debug("Found userId (sub) in JWT: {}", subject);
+                    return Optional.of(subject);
+                }
+            }
+        }
+
+        return Optional.ofNullable(session.getPrincipal())
+                .map(principal -> {
+                    if (principal instanceof JwtAuthenticationToken jwtAuth) {
+                        return jwtAuth.getToken().getSubject();
+                    }
+                    return null;
+                })
+                .filter(StringUtils::hasText);
+    }
+
     private void registerHeartbeat(WebSocketSession session) {
         cancelHeartbeat(session.getId());
         ScheduledFuture<?> future = heartbeatScheduler.scheduleAtFixedRate(
@@ -303,8 +365,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 },
                 INITIAL_HEARTBEAT_DELAY.toSeconds(),
                 HEARTBEAT_INTERVAL.toSeconds(),
-                TimeUnit.SECONDS
-        );
+                TimeUnit.SECONDS);
         heartbeatRegistrations.put(session.getId(), future);
     }
 

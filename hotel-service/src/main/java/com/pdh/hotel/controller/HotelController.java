@@ -334,7 +334,7 @@ public class HotelController {
     }
 
     @GetMapping("/storefront/availability")
-    @McpTool(name = "check_hotel_availability", description = "Check if a hotel room type has enough inventory for the requested stay dates.")
+    @Tool(name = "check_hotel_availability", description = "Check if a hotel room type has enough inventory for the requested stay dates.")
     public ResponseEntity<Map<String, Object>> checkHotelAvailability(
             @Schema(description = "Hotel identifier", example = "1", minimum = "1", required = true)
             @RequestParam Long hotelId,

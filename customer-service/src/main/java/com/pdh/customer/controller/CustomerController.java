@@ -1,6 +1,5 @@
 package com.pdh.customer.controller;
 
-
 import com.pdh.customer.service.CustomerService;
 import com.pdh.customer.viewmodel.*;
 import com.pdh.common.utils.AuthenticationUtils;
@@ -10,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 
 @RestController
 @Tag(name = "Customers", description = "Customer management and profile operations")
@@ -29,6 +29,12 @@ public class CustomerController {
             @RequestParam(defaultValue = "10") int size) {
         CustomerListVm customers = customerService.getCustomers(page);
         return ResponseEntity.ok(customers);
+    }
+
+    @GetMapping("/backoffice/admin/customers/statistics")
+    public ResponseEntity<Map<String, Object>> getCustomerStatistics() {
+        Map<String, Object> stats = customerService.getCustomerStatistics();
+        return ResponseEntity.ok(stats);
     }
 
     @GetMapping("/backoffice/admin/customers/{id}")
@@ -79,21 +85,25 @@ public class CustomerController {
         CustomerVm customer = customerService.getCustomerProfile(userId);
         return ResponseEntity.ok(customer);
     }
+
     @GetMapping("/storefront/profile/{userId}")
     public ResponseEntity<CustomerVm> getCustomerProfile(@PathVariable String userId) {
 
         CustomerVm customer = customerService.getCustomerProfile(userId);
         return ResponseEntity.ok(customer);
     }
+
     @PutMapping("/storefront/profile")
-    public ResponseEntity<Void> updateCustomerProfile(@Valid @RequestBody CustomerProfileRequestVm customerProfileRequestVm) {
+    public ResponseEntity<Void> updateCustomerProfile(
+            @Valid @RequestBody CustomerProfileRequestVm customerProfileRequestVm) {
         String userId = AuthenticationUtils.extractUserId();
         customerService.updateCustomer(userId, customerProfileRequestVm);
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/storefront/profile/password")
-    public ResponseEntity<Void> updateCustomerPassword(@Valid @RequestBody CustomerPasswordRequestVm passwordRequestVm) {
+    public ResponseEntity<Void> updateCustomerPassword(
+            @Valid @RequestBody CustomerPasswordRequestVm passwordRequestVm) {
         String userId = AuthenticationUtils.extractUserId();
         customerService.updateCustomerPassword(userId, passwordRequestVm);
         return ResponseEntity.noContent().build();
@@ -107,7 +117,8 @@ public class CustomerController {
     }
 
     @PutMapping("/storefront/profile/attributes")
-    public ResponseEntity<Void> updateCustomerAttributes(@Valid @RequestBody CustomerAttributesRequestVm attributesRequestVm) {
+    public ResponseEntity<Void> updateCustomerAttributes(
+            @Valid @RequestBody CustomerAttributesRequestVm attributesRequestVm) {
         String userId = AuthenticationUtils.extractUserId();
         customerService.updateCustomerAttributes(userId, attributesRequestVm);
         return ResponseEntity.noContent().build();

@@ -126,14 +126,11 @@ spring:
         version: 1.0.0
         type: sync
         base-url: /hotels
-        protocol: streamable
         capabilities:
           prompt: false
           completion: false
           resource: false
-        prompt-change-notification: false
-        resource-change-notification: false
-
+          tool: true
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}

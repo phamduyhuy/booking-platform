@@ -1,5 +1,11 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { User, Plane, Hotel, CreditCard, AlertTriangle } from "lucide-react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { User, Plane, Hotel, CreditCard, AlertTriangle } from "lucide-react";
 
 const activities = [
   {
@@ -47,23 +53,56 @@ const activities = [
     icon: User,
     color: "gray",
   },
-]
+];
 
-export function RecentActivity() {
+export interface ActivityItem {
+  id: number | string;
+  type: "booking" | "payment" | "hotel" | "cancel" | "register";
+  user: string;
+  action: string;
+  time: string;
+  icon?: any;
+  color: string;
+}
+
+interface RecentActivityProps {
+  activities?: ActivityItem[];
+}
+
+export function RecentActivity({ activities = [] }: RecentActivityProps) {
   const getIconColor = (color: string) => {
     switch (color) {
       case "blue":
-        return "text-blue-600 bg-blue-100"
+        return "text-blue-600 bg-blue-100";
       case "green":
-        return "text-green-600 bg-green-100"
+        return "text-green-600 bg-green-100";
       case "purple":
-        return "text-purple-600 bg-purple-100"
+        return "text-purple-600 bg-purple-100";
       case "red":
-        return "text-red-600 bg-red-100"
+        return "text-red-600 bg-red-100";
       default:
-        return "text-gray-600 bg-gray-100"
+        return "text-gray-600 bg-gray-100";
     }
-  }
+  };
+
+  const getIcon = (activity: ActivityItem) => {
+    if (activity.icon) return <activity.icon className="w-4 h-4" />;
+
+    switch (activity.type) {
+      case "booking":
+        return <Plane className="w-4 h-4" />;
+      case "payment":
+        return <CreditCard className="w-4 h-4" />;
+      case "hotel":
+        return <Hotel className="w-4 h-4" />;
+      case "cancel":
+        return <AlertTriangle className="w-4 h-4" />;
+      case "register":
+        return <User className="w-4 h-4" />;
+      default:
+        return <User className="w-4 h-4" />;
+    }
+  };
 
   return (
     <Card>
@@ -73,22 +112,32 @@ export function RecentActivity() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {activities.map((activity) => (
-            <div key={activity.id} className="flex items-start space-x-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getIconColor(activity.color)}`}>
-                <activity.icon className="w-4 h-4" />
+          {activities.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-4">
+              Chưa có hoạt động nào
+            </p>
+          ) : (
+            activities.map((activity) => (
+              <div key={activity.id} className="flex items-start space-x-3">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${getIconColor(
+                    activity.color
+                  )}`}
+                >
+                  {getIcon(activity)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm">
+                    <span className="font-medium">{activity.user}</span>{" "}
+                    <span className="text-gray-600">{activity.action}</span>
+                  </p>
+                  <p className="text-xs text-gray-500">{activity.time}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm">
-                  <span className="font-medium">{activity.user}</span>{" "}
-                  <span className="text-gray-600">{activity.action}</span>
-                </p>
-                <p className="text-xs text-gray-500">{activity.time}</p>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

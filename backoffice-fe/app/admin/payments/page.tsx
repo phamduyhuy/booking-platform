@@ -13,6 +13,7 @@ import { AdminLayout } from "@/components/admin/admin-layout"
 import { PaymentDetailDialog } from "@/components/admin/payment/payment-detail-dialog"
 import { PaymentRefundDialog } from "@/components/admin/payment/payment-refund-dialog"
 import { ManualPaymentDialog } from "@/components/admin/payment/ManualPaymentDialog"
+import { PaymentReconciliationDialog } from "@/components/admin/payment/payment-reconciliation-dialog"
 import { PaymentService } from "@/services/payment-service"
 import type { Payment, PaymentStats, PaymentFilters, PaginatedResponse } from "@/types/api"
 import { toast } from "@/hooks/use-toast"
@@ -34,6 +35,8 @@ export default function AdminPayments() {
   const [showDetailDialog, setShowDetailDialog] = useState(false)
   const [showRefundDialog, setShowRefundDialog] = useState(false)
   const [showManualPaymentDialog, setShowManualPaymentDialog] = useState(false)
+  const [showReconciliationDialog, setShowReconciliationDialog] = useState(false)
+  const [reconciliationResult, setReconciliationResult] = useState<any>(null)
   const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
@@ -108,19 +111,22 @@ export default function AdminPayments() {
   const handleReconcilePayment = async (paymentId: string) => {
     try {
       setActionLoading(true)
-      await PaymentService.reconcilePayment(paymentId)
+      const result = await PaymentService.reconcilePayment(paymentId)
       
-      toast({
-        title: "Success",
-        description: "Payment reconciliation completed successfully",
-      })
+      // Show reconciliation dialog with full details
+      setReconciliationResult(result)
+      setShowReconciliationDialog(true)
       
-      loadPayments() // Refresh the list
+      // If auto-updated, refresh the list
+      if (result.autoUpdated) {
+        loadPayments()
+      }
+      
     } catch (error) {
       console.error("Failed to reconcile payment:", error)
       toast({
-        title: "Error",
-        description: "Failed to reconcile payment. Please try again.",
+        title: "Lỗi",
+        description: "Không thể đối soát thanh toán. Vui lòng thử lại.",
         variant: "destructive",
       })
     } finally {
@@ -524,6 +530,12 @@ export default function AdminPayments() {
         open={showManualPaymentDialog}
         onOpenChange={setShowManualPaymentDialog}
         onSuccess={loadPayments}
+      />
+
+      <PaymentReconciliationDialog
+        open={showReconciliationDialog}
+        onOpenChange={setShowReconciliationDialog}
+        result={reconciliationResult}
       />
     </AdminLayout>
   )
