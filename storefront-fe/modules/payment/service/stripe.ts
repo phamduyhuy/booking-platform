@@ -63,7 +63,7 @@ class StripePaymentService {
   async createRefund(request: StripeRefundRequest): Promise<StripeRefundResponse> {
     try {
       return await apiClient.post<StripeRefundResponse>(
-        `${this.baseUrl}/refund`,
+        `${this.baseUrl}/refund/${request.transactionId}`,
         request
       )
     } catch (error) {
@@ -125,6 +125,19 @@ class StripePaymentService {
       )
     } catch (error) {
       console.error('Error getting customer:', error)
+      throw error
+    }
+  }
+  /**
+   * Get payment summary by booking ID
+   */
+  async getPaymentSummary(bookingId: string): Promise<any> {
+    try {
+      return await apiClient.get<any>(
+        `${this.baseUrl}/storefront/bookings/${bookingId}/summary`
+      )
+    } catch (error) {
+      console.error('Error getting payment summary:', error)
       throw error
     }
   }

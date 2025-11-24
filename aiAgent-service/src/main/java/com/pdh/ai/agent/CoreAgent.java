@@ -1,16 +1,12 @@
 package com.pdh.ai.agent;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import com.pdh.ai.agent.tools.CurrentDateTimeZoneTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import com.pdh.ai.agent.advisor.CustomMessageChatMemoryAdvisor;
 import com.pdh.ai.agent.guard.InputValidationGuard;
-import com.pdh.ai.agent.guard.ScopeGuard;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClient.CallResponseSpec;
 import org.springframework.ai.chat.client.advisor.StructuredOutputValidationAdvisor;
@@ -192,6 +188,7 @@ public class CoreAgent {
       Then IMMEDIATELY initiate the **PAYMENT FLOW**:
       1. Call `get_user_stored_payment_methods`
       2. Ask user if they want to pay using their default method or select another.
+      3. If user don't have any payment method, ask them to add a new payment method
 
       ⚠️ Note: Your booking will be held for 15 minutes. Please complete payment soon to confirm your reservation.
       Be friendly, congratulate the user, and clearly guide them to the payment step.
@@ -227,8 +224,6 @@ public class CoreAgent {
       InputValidationGuard inputValidationGuard,
       GoogleGenAiChatModel googleGenAiChatModel) {
 
-
-
     // Advisors
     CustomMessageChatMemoryAdvisor memoryAdvisor = CustomMessageChatMemoryAdvisor.builder(chatMemory)
         .build();
@@ -242,11 +237,12 @@ public class CoreAgent {
         .maxRepeatAttempts(3)
         .advisorOrder(BaseAdvisor.HIGHEST_PRECEDENCE + 1000)
         .build();
-
+    
     this.chatClient = ChatClient.builder(googleGenAiChatModel)
         .defaultToolCallbacks(toolCallbackProvider)
         .defaultAdvisors(memoryAdvisor, validationAdvisor, toolCallAdvisor)
         .defaultTools(currentDateTimeZoneTool)
+
         .build();
 
   }
@@ -263,7 +259,7 @@ public class CoreAgent {
     logger.info("[SYNC-TOOL-TRACKER] Starting processSyncStructured - conversationId: {}, userId: {}", conversationId,
         userId);
     logger.info("[SYNC-TOOL-TRACKER] User message: {}", message);
-   
+
     return Mono.fromCallable(() -> {
       // Extract username from conversationId (format: username:actualConvId)
       String username = getUsernameFromConversationId(conversationId);
@@ -296,28 +292,14 @@ public class CoreAgent {
         return rawResponse.entity(beanOutputConverter);
       } catch (Exception e) {
         // Try to parse as JSON using Spring AI's BeanOutputConverter
-        try {
-          StructuredChatPayload result = beanOutputConverter.convert(rawResponse.content());
+        logger.warn("[SYNC-TOOL-TRACKER] Failed to parse as JSON, using raw content as message: {}",
+            e.getMessage());
+        logger.debug("[SYNC-TOOL-TRACKER] Raw response: {}",
+            rawResponse.content().substring(0, Math.min(200, rawResponse.content().length())));
 
-          logger.info("[SYNC-TOOL-TRACKER] Successfully parsed structured response: message={}, results={}",
-              result.getMessage() != null
-                  ? result.getMessage().substring(0, Math.min(50, result.getMessage().length()))
-                  : "null",
-              result.getResults() != null ? result.getResults().size() : 0);
-
-          return result;
-
-        } catch (Exception ex) {
-          logger.warn("[SYNC-TOOL-TRACKER] Failed to parse as JSON, using raw content as message: {}",
-              e.getMessage());
-          logger.debug("[SYNC-TOOL-TRACKER] Raw response: {}",
-              rawResponse.content().substring(0, Math.min(200, rawResponse.content().length())));
-
-          // Fallback: Wrap plain text in StructuredChatPayload
-          return buildFallbackResponse(rawResponse.content());
-        }
+        // Fallback: Wrap plain text in StructuredChatPayload
+        return buildFallbackResponse(rawResponse.content());
       }
-      
 
     }).onErrorResume(e -> {
       logger.error("[SYNC-TOOL-TRACKER] Error in processSyncStructured: {}", e.getMessage(), e);

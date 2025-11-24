@@ -47,7 +47,8 @@ public class BookingSagaOrchestrator {
 
     private static final String BOOKING_SAGA_COMMAND_TOPIC = "booking-saga-commands";
     private static final String PAYMENT_SAGA_COMMAND_TOPIC = "payment-saga-commands";
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     private final BookingSagaRepository sagaRepository;
     private final BookingRepository bookingRepository;
@@ -129,7 +130,7 @@ public class BookingSagaOrchestrator {
             if (isBlank(eventType))
                 eventType = text(payload, "type");
         }
-        
+
         // Trim whitespace and normalize
         if (eventType != null) {
             eventType = eventType.trim();
@@ -137,7 +138,8 @@ public class BookingSagaOrchestrator {
 
         log.debug("EVENT TYPE HEADER: {}", eventTypeHeader);
         log.debug("DETERMINED EVENT TYPE: {}", eventType);
-        log.debug("EVENT TYPE LENGTH: {}, TRIMMED: '{}'", eventType != null ? eventType.length() : 0, eventType != null ? eventType.trim() : "null");
+        log.debug("EVENT TYPE LENGTH: {}, TRIMMED: '{}'", eventType != null ? eventType.length() : 0,
+                eventType != null ? eventType.trim() : "null");
 
         if (isBlank(eventType)) {
             log.warn("Saga outbox event ignored due to missing eventType. message={}", root.toString());
@@ -146,7 +148,7 @@ public class BookingSagaOrchestrator {
 
         // 4) Payload phẳng để downstream xử lý
         String payloadJson = payload.toString();
-        
+
         log.info("About to process saga event: type='{}', payloadLength={}", eventType, payloadJson.length());
 
         switch (eventType) {
@@ -196,8 +198,9 @@ public class BookingSagaOrchestrator {
     }
 
     private void processSagaCallback(String payloadJson, String eventType, SagaEventHandler handler) {
-        log.info("processSagaCallback called: eventType='{}', payloadLength={}", eventType, payloadJson != null ? payloadJson.length() : 0);
-        
+        log.info("processSagaCallback called: eventType='{}', payloadLength={}", eventType,
+                payloadJson != null ? payloadJson.length() : 0);
+
         if (StringUtils.isBlank(payloadJson)) {
             log.warn("processSagaCallback: payloadJson is blank for eventType={}", eventType);
             return;
@@ -213,12 +216,13 @@ public class BookingSagaOrchestrator {
 
             UUID bookingId = UUID.fromString(bookingIdNode.asText());
             log.info("Looking for saga with bookingId={} for eventType={}", bookingId, eventType);
-            
+
             Optional<BookingSagaInstance> sagaOpt = sagaRepository.findByBookingId(bookingId);
             Optional<Booking> bookingOpt = bookingRepository.findByBookingId(bookingId);
 
             if (sagaOpt.isEmpty() || bookingOpt.isEmpty()) {
-                log.warn("Saga callback ignored because saga or booking not found: bookingId={}, type={}, sagaExists={}, bookingExists={}", 
+                log.warn(
+                        "Saga callback ignored because saga or booking not found: bookingId={}, type={}, sagaExists={}, bookingExists={}",
                         bookingId, eventType, sagaOpt.isPresent(), bookingOpt.isPresent());
                 return;
             }
@@ -229,7 +233,8 @@ public class BookingSagaOrchestrator {
                 return;
             }
 
-            log.info("Invoking handler for eventType={}, saga={}, bookingId={}", eventType, saga.getSagaId(), bookingId);
+            log.info("Invoking handler for eventType={}, saga={}, bookingId={}", eventType, saga.getSagaId(),
+                    bookingId);
             handler.handle(saga, bookingOpt.get(), eventType, payload);
             log.info("Handler completed successfully for eventType={}, saga={}", eventType, saga.getSagaId());
         } catch (Exception e) {
@@ -418,11 +423,11 @@ public class BookingSagaOrchestrator {
 
     @Transactional
     void onPaymentProcessed(BookingSagaInstance saga, Booking booking, JsonNode payload) {
-        log.info("Payment processed for booking {} saga {} - Current state: {}, Booking status: {}", 
+        log.info("Payment processed for booking {} saga {} - Current state: {}, Booking status: {}",
                 booking.getBookingId(), saga.getSagaId(), saga.getCurrentState(), booking.getStatus());
-        
+
         transitionState(saga, SagaState.PAYMENT_COMPLETED, "PaymentProcessed", payload, null);
-        
+
         Map<String, Object> extras = new HashMap<>();
         extras.put("emailTemplate", "booking-payment.ftl");
         Map<String, Object> paymentDetails = convertJsonNodeToMap(payload);
@@ -430,10 +435,10 @@ public class BookingSagaOrchestrator {
             extras.put("payment", paymentDetails);
         }
         publishNotificationEvent(booking, "BookingPaymentSucceeded", extras);
-        
+
         completeSaga(saga, booking, payload);
-        
-        log.info("Payment processed completed - Saga state: {}, Booking status: {}", 
+
+        log.info("Payment processed completed - Saga state: {}, Booking status: {}",
                 saga.getCurrentState(), booking.getStatus());
     }
 
@@ -453,6 +458,24 @@ public class BookingSagaOrchestrator {
     void onPaymentRefunded(BookingSagaInstance saga, Booking booking, JsonNode payload) {
         log.info("Payment refunded for booking {} saga {}", booking.getBookingId(), saga.getSagaId());
         transitionState(saga, SagaState.COMPENSATION_PAYMENT_REFUND, "PaymentRefunded", payload, null);
+
+        // Trigger compensation for Flight/Hotel
+        if (hasFlight(booking)) {
+            requestFlightCancellation(saga, booking, payload, "Payment refunded");
+        }
+        if (hasHotel(booking)) {
+            requestHotelCancellation(saga, booking, payload, "Payment refunded");
+        }
+
+        // Send notification
+        Map<String, Object> extras = new HashMap<>();
+        extras.put("emailTemplate", "booking-refunded.ftl");
+        Map<String, Object> refundDetails = convertJsonNodeToMap(payload);
+        if (!refundDetails.isEmpty()) {
+            extras.put("refund", refundDetails);
+        }
+        publishNotificationEvent(booking, "BookingRefunded", extras);
+
         cancelSaga(saga, booking, BookingStatus.CANCELLED, "PaymentRefunded", payload, "Payment refunded");
     }
 
@@ -613,7 +636,8 @@ public class BookingSagaOrchestrator {
             }
         }
         if (booking.getBookingType() == BookingType.COMBO) {
-            ComboBookingDetailsDto combo = (ComboBookingDetailsDto) productDetailsService.convertFromJson(booking.getBookingType(), booking.getProductDetailsJson());
+            ComboBookingDetailsDto combo = (ComboBookingDetailsDto) productDetailsService
+                    .convertFromJson(booking.getBookingType(), booking.getProductDetailsJson());
             Map<String, Object> comboDetails = convertObjectToMap(combo);
             if (!comboDetails.isEmpty()) {
                 details.put("combo", comboDetails);
@@ -687,7 +711,8 @@ public class BookingSagaOrchestrator {
             if (data.isEmpty()) {
                 continue;
             }
-            if ("PRIMARY".equalsIgnoreCase(guest.getGuestType()) && StringUtils.isNotBlank((String) data.get("email"))) {
+            if ("PRIMARY".equalsIgnoreCase(guest.getGuestType())
+                    && StringUtils.isNotBlank((String) data.get("email"))) {
                 return data;
             }
             if (StringUtils.isNotBlank((String) data.get("email"))) {
@@ -791,8 +816,7 @@ public class BookingSagaOrchestrator {
         SagaState currentState = saga.getCurrentState();
         if (currentState == SagaState.FLIGHT_RESERVED || currentState == SagaState.HOTEL_RESERVED) {
             transitionState(saga, SagaState.PAYMENT_PENDING, "PaymentRequested", null, null);
-        }
-        else if (currentState != SagaState.PAYMENT_PENDING) {
+        } else if (currentState != SagaState.PAYMENT_PENDING) {
             log.warn("Ignoring manual payment initiation for booking {} in state {}", bookingId, currentState);
             throw new IllegalStateException("Booking is not ready for payment: state=" + currentState);
         }
@@ -917,12 +941,13 @@ public class BookingSagaOrchestrator {
         Map<String, Object> extras = new HashMap<>();
         extras.put("emailTemplate", "booking-confirmation.ftl");
         publishNotificationEvent(booking, "BookingConfirmed", extras);
-        
+
         // Release reservation lock after saving booking state to ensure consistency
         try {
             bookingService.releaseReservationLock(booking);
         } catch (Exception e) {
-            log.error("Failed to release reservation lock for booking {}: {}", booking.getBookingId(), e.getMessage(), e);
+            log.error("Failed to release reservation lock for booking {}: {}", booking.getBookingId(), e.getMessage(),
+                    e);
             // Don't fail the entire operation if lock release fails - just log the error
         }
     }

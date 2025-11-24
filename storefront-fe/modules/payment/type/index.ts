@@ -69,6 +69,7 @@ export interface CreatePaymentIntentPayload {
 
 export interface RefundRequest {
   paymentIntentId: string
+  transactionId: string
   amount?: number
   reason?: string
   metadata?: Record<string, string>

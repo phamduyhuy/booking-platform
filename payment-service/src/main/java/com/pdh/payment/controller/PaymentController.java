@@ -37,14 +37,13 @@ public class PaymentController {
     private final PaymentRepository paymentRepository;
     private final PaymentStrategyFactory strategyFactory;
 
-
-
     /**
      * Process payment using Strategy Pattern - Reactive implementation
      */
     @PostMapping("/process-payment")
- 
-    public ResponseEntity<Map<String, Object>> processPaymentWithStrategy(@Valid @RequestBody PaymentProcessRequest request) {
+
+    public ResponseEntity<Map<String, Object>> processPaymentWithStrategy(
+            @Valid @RequestBody PaymentProcessRequest request) {
         try {
             UUID userId = AuthenticationUtils.getCurrentUserIdFromContext();
 
@@ -58,27 +57,27 @@ public class PaymentController {
             PaymentMethod paymentMethod = createOrGetPaymentMethod(paymentRequest, userId);
 
             // Process payment using strategy
-            PaymentTransaction transaction = paymentService.processPayment(payment, paymentMethod, request.getAdditionalData());
+            PaymentTransaction transaction = paymentService.processPayment(payment, paymentMethod,
+                    request.getAdditionalData());
 
             Map<String, Object> response = Map.of(
-                "success", true,
-                "transactionId", transaction.getTransactionId(),
-                "status", transaction.getStatus(),
-                "amount", transaction.getAmount(),
-                "currency", transaction.getCurrency(),
-                "gatewayTransactionId", transaction.getGatewayTransactionId() != null ? transaction.getGatewayTransactionId() : "",
-                "message", "Payment processed successfully"
-            );
+                    "success", true,
+                    "transactionId", transaction.getTransactionId(),
+                    "status", transaction.getStatus(),
+                    "amount", transaction.getAmount(),
+                    "currency", transaction.getCurrency(),
+                    "gatewayTransactionId",
+                    transaction.getGatewayTransactionId() != null ? transaction.getGatewayTransactionId() : "",
+                    "message", "Payment processed successfully");
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             log.error("Payment processing failed", e);
             Map<String, Object> errorResponse = Map.of(
-                "success", false,
-                "error", e.getMessage(),
-                "message", "Payment processing failed"
-            );
+                    "success", false,
+                    "error", e.getMessage(),
+                    "message", "Payment processing failed");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
@@ -87,7 +86,8 @@ public class PaymentController {
      * Create Stripe PaymentIntent for frontend integration
      */
     @PostMapping("/stripe/create-payment-intent")
-    public ResponseEntity<StripePaymentIntentResponse> createStripePaymentIntent(@Valid @RequestBody StripePaymentIntentRequest request) {
+    public ResponseEntity<StripePaymentIntentResponse> createStripePaymentIntent(
+            @Valid @RequestBody StripePaymentIntentRequest request) {
         try {
             UUID userId = AuthenticationUtils.getCurrentUserIdFromContext();
 
@@ -98,11 +98,11 @@ public class PaymentController {
         } catch (Exception e) {
             log.error("Stripe PaymentIntent creation failed", e);
             StripePaymentIntentResponse errorResponse = StripePaymentIntentResponse.builder()
-                .error(StripePaymentIntentResponse.StripeErrorDto.builder()
-                    .message(e.getMessage())
-                    .type("api_error")
-                    .build())
-                .build();
+                    .error(StripePaymentIntentResponse.StripeErrorDto.builder()
+                            .message(e.getMessage())
+                            .type("api_error")
+                            .build())
+                    .build();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
@@ -126,26 +126,25 @@ public class PaymentController {
             response.put("transactionId", updatedTransaction.getTransactionId());
             response.put("status", updatedTransaction.getStatus());
             response.put("gatewayStatus", updatedTransaction.getGatewayStatus());
-            response.put("message", success ? "Payment intent confirmed successfully" : "Payment intent requires additional action");
+            response.put("message",
+                    success ? "Payment intent confirmed successfully" : "Payment intent requires additional action");
 
             return ResponseEntity.ok(response);
 
         } catch (IllegalArgumentException notFound) {
             log.error("Stripe PaymentIntent confirmation failed: {}", notFound.getMessage());
             Map<String, Object> errorResponse = Map.of(
-                "success", false,
-                "error", notFound.getMessage(),
-                "message", "Payment intent not found"
-            );
+                    "success", false,
+                    "error", notFound.getMessage(),
+                    "message", "Payment intent not found");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
 
         } catch (Exception e) {
             log.error("Stripe PaymentIntent confirmation failed", e);
             Map<String, Object> errorResponse = Map.of(
-                "success", false,
-                "error", e.getMessage(),
-                "message", "Payment confirmation failed"
-            );
+                    "success", false,
+                    "error", e.getMessage(),
+                    "message", "Payment confirmation failed");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
@@ -154,27 +153,27 @@ public class PaymentController {
      * Confirm completed Stripe payment (user-driven flow)
      */
     @PostMapping("/stripe/confirm-payment")
-    public ResponseEntity<Map<String, Object>> confirmStripePayment(@Valid @RequestBody StripePaymentConfirmationRequest request) {
+    public ResponseEntity<Map<String, Object>> confirmStripePayment(
+            @Valid @RequestBody StripePaymentConfirmationRequest request) {
         try {
-            PaymentTransaction transaction = paymentService.confirmStripePayment(request.getTransactionId(), request.getBookingId());
+            PaymentTransaction transaction = paymentService.confirmStripePayment(request.getTransactionId(),
+                    request.getBookingId());
 
             Map<String, Object> response = Map.of(
-                "success", true,
-                "transactionId", transaction.getTransactionId(),
-                "paymentIntentId", transaction.getGatewayTransactionId(),
-                "status", transaction.getStatus(),
-                "message", "Payment confirmed successfully"
-            );
+                    "success", true,
+                    "transactionId", transaction.getTransactionId(),
+                    "paymentIntentId", transaction.getGatewayTransactionId(),
+                    "status", transaction.getStatus(),
+                    "message", "Payment confirmed successfully");
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             log.error("Stripe payment confirmation failed", e);
             Map<String, Object> errorResponse = Map.of(
-                "success", false,
-                "error", e.getMessage(),
-                "message", "Payment confirmation failed"
-            );
+                    "success", false,
+                    "error", e.getMessage(),
+                    "message", "Payment confirmation failed");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
@@ -183,12 +182,18 @@ public class PaymentController {
     public ResponseEntity<Map<String, Object>> getPaymentSummary(@PathVariable UUID bookingId) {
         UUID currentUser = AuthenticationUtils.getCurrentUserIdFromContext();
 
-        Optional<Payment> paymentOpt = paymentRepository.findByBookingId(bookingId);
-        if (paymentOpt.isEmpty()) {
+        List<Payment> payments = paymentRepository.findByBookingIdOrderByCreatedAtDesc(bookingId);
+        if (payments.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
 
-        Payment payment = paymentOpt.get();
+        // Get the most recent completed payment, or most recent payment if none
+        // completed
+        Payment payment = payments.stream()
+                .filter(p -> p.getStatus() == com.pdh.payment.model.enums.PaymentStatus.COMPLETED)
+                .findFirst()
+                .orElse(payments.get(0));
+
         if (payment.getUserId() != null && !payment.getUserId().equals(currentUser)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
@@ -200,6 +205,12 @@ public class PaymentController {
         summary.put("currency", payment.getCurrency());
         summary.put("status", payment.getStatus());
         summary.put("updatedAt", payment.getUpdatedAt());
+
+        // Add latest successful transaction ID for refund purposes
+        payment.getTransactions().stream()
+                .filter(t -> t.getStatus().isSuccessful())
+                .max((t1, t2) -> t1.getCreatedAt().compareTo(t2.getCreatedAt()))
+                .ifPresent(t -> summary.put("transactionId", t.getTransactionId()));
 
         return ResponseEntity.ok(summary);
     }
@@ -213,28 +224,25 @@ public class PaymentController {
             @RequestBody RefundRequest refundRequest) {
         try {
             PaymentTransaction refundTransaction = paymentService.processRefund(
-                transactionId, 
-                refundRequest.getAmount(), 
-                refundRequest.getReason()
-            );
-            
+                    transactionId,
+                    refundRequest.getAmount(),
+                    refundRequest.getReason());
+
             Map<String, Object> response = Map.of(
-                "success", true,
-                "refundTransactionId", refundTransaction.getTransactionId(),
-                "status", refundTransaction.getStatus(),
-                "amount", refundTransaction.getAmount(),
-                "message", "Refund processed successfully"
-            );
-            
+                    "success", true,
+                    "refundTransactionId", refundTransaction.getTransactionId(),
+                    "status", refundTransaction.getStatus(),
+                    "amount", refundTransaction.getAmount(),
+                    "message", "Refund processed successfully");
+
             return ResponseEntity.ok(response);
-            
+
         } catch (Exception e) {
             log.error("Refund processing failed", e);
             Map<String, Object> errorResponse = Map.of(
-                "success", false,
-                "error", e.getMessage(),
-                "message", "Refund processing failed"
-            );
+                    "success", false,
+                    "error", e.getMessage(),
+                    "message", "Refund processing failed");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
@@ -246,26 +254,24 @@ public class PaymentController {
     public ResponseEntity<Map<String, Object>> verifyPaymentStatus(@PathVariable UUID transactionId) {
         try {
             PaymentTransaction transaction = paymentService.verifyPaymentStatus(transactionId);
-            
+
             Map<String, Object> response = Map.of(
-                "success", true,
-                "transactionId", transaction.getTransactionId(),
-                "status", transaction.getStatus(),
-                "gatewayStatus", transaction.getGatewayStatus(),
-                "amount", transaction.getAmount(),
-                "currency", transaction.getCurrency(),
-                "message", "Status verified successfully"
-            );
-            
+                    "success", true,
+                    "transactionId", transaction.getTransactionId(),
+                    "status", transaction.getStatus(),
+                    "gatewayStatus", transaction.getGatewayStatus(),
+                    "amount", transaction.getAmount(),
+                    "currency", transaction.getCurrency(),
+                    "message", "Status verified successfully");
+
             return ResponseEntity.ok(response);
-            
+
         } catch (Exception e) {
             log.error("Payment status verification failed", e);
             Map<String, Object> errorResponse = Map.of(
-                "success", false,
-                "error", e.getMessage(),
-                "message", "Status verification failed"
-            );
+                    "success", false,
+                    "error", e.getMessage(),
+                    "message", "Status verification failed");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
@@ -280,23 +286,21 @@ public class PaymentController {
         try {
             String reason = request.getOrDefault("reason", "User cancelled");
             PaymentTransaction cancelledTransaction = paymentService.cancelPayment(transactionId, reason);
-            
+
             Map<String, Object> response = Map.of(
-                "success", true,
-                "transactionId", cancelledTransaction.getTransactionId(),
-                "status", cancelledTransaction.getStatus(),
-                "message", "Payment cancelled successfully"
-            );
-            
+                    "success", true,
+                    "transactionId", cancelledTransaction.getTransactionId(),
+                    "status", cancelledTransaction.getStatus(),
+                    "message", "Payment cancelled successfully");
+
             return ResponseEntity.ok(response);
-            
+
         } catch (Exception e) {
             log.error("Payment cancellation failed", e);
             Map<String, Object> errorResponse = Map.of(
-                "success", false,
-                "error", e.getMessage(),
-                "message", "Payment cancellation failed"
-            );
+                    "success", false,
+                    "error", e.getMessage(),
+                    "message", "Payment cancellation failed");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }

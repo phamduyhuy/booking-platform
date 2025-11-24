@@ -315,10 +315,9 @@ spring:
 
         chat:
           options:
-            model: gemini-2.5-pro
+            model: gemini-2.5-flash
             temperature: 0.1
-            use-cached-content: true
-            auto-cache-ttl: 86400 # 1 day in seconds
+            response-mime-type: application/json
 
     mcp:
       client:

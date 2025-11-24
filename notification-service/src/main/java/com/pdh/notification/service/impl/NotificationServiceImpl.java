@@ -36,7 +36,8 @@ import java.util.UUID;
 @Slf4j
 public class NotificationServiceImpl implements NotificationService {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     private final OutboxEventService eventPublisher;
     private final JavaMailSender mailSender;
@@ -60,8 +61,7 @@ public class NotificationServiceImpl implements NotificationService {
                     "message", message,
                     "bookingId", bookingId,
                     "sentTime", LocalDateTime.now().toString(),
-                    "status", "sent"
-            ));
+                    "status", "sent"));
             return true;
         } catch (Exception ex) {
             log.error("Failed to send notification email to {}", recipientId, ex);
@@ -132,8 +132,7 @@ public class NotificationServiceImpl implements NotificationService {
                     "bookingId", payload.get("bookingId"),
                     "bookingReference", payload.get("bookingReference"),
                     "sentTime", LocalDateTime.now().toString(),
-                    "status", "sent"
-            ));
+                    "status", "sent"));
         } catch (Exception ex) {
             log.error("Failed to send {} email for booking {}", eventType, payload.get("bookingId"), ex);
             publishOutboxEvent("NotificationFailed", Map.of(
@@ -142,8 +141,7 @@ public class NotificationServiceImpl implements NotificationService {
                     "bookingId", payload.get("bookingId"),
                     "error", ex.getMessage(),
                     "sentTime", LocalDateTime.now().toString(),
-                    "status", "failed"
-            ));
+                    "status", "failed"));
         }
     }
 
@@ -166,7 +164,8 @@ public class NotificationServiceImpl implements NotificationService {
         mailSender.send(message);
     }
 
-    private String renderTemplate(String templateName, Map<String, Object> model) throws IOException, TemplateException {
+    private String renderTemplate(String templateName, Map<String, Object> model)
+            throws IOException, TemplateException {
         Template template = freemarkerConfiguration.getTemplate(templateName);
         try (StringWriter writer = new StringWriter()) {
             template.process(model, writer);
@@ -196,9 +195,9 @@ public class NotificationServiceImpl implements NotificationService {
             return objectMapper.convertValue(value, MAP_TYPE);
         } catch (IllegalArgumentException ex) {
             log.debug("Failed to convert value to map: {}", value, ex);
-        return null;
+            return null;
+        }
     }
-}
 
     private Map<String, Object> normalizeProductDetails(Object productDetails) {
         Map<String, Object> detailsMap = toMap(productDetails);
@@ -296,11 +295,13 @@ public class NotificationServiceImpl implements NotificationService {
                 : String.valueOf(payload.getOrDefault("bookingId", ""));
         return switch (eventType) {
             case "BookingPaymentSucceeded" ->
-                    "Payment received for booking " + bookingReference;
+                "Payment received for booking " + bookingReference;
             case "BookingConfirmed" ->
-                    "Booking confirmed - " + bookingReference;
+                "Booking confirmed - " + bookingReference;
+            case "BookingRefunded" ->
+                "Booking Refunded - " + bookingReference;
             default ->
-                    "Booking update - " + bookingReference;
+                "Booking update - " + bookingReference;
         };
     }
 
@@ -339,7 +340,7 @@ public class NotificationServiceImpl implements NotificationService {
         if (payload.containsKey("totalAmount") && payload.get("totalAmount") != null) {
             return payload.get("totalAmount");
         }
-        
+
         if (payload.containsKey("amount") && payload.get("amount") != null) {
             return payload.get("amount");
         }
@@ -356,7 +357,7 @@ public class NotificationServiceImpl implements NotificationService {
                     return hotelMap.get("totalRoomPrice");
                 }
             }
-            
+
             // Also check in hotelDetails
             Object hotelDetails = payload.get("hotelDetails");
             if (hotelDetails instanceof Map) {
@@ -381,12 +382,13 @@ public class NotificationServiceImpl implements NotificationService {
                     return flightMap.get("totalFlightPrice");
                 }
             }
-            
+
             // Also check in flightDetails
             Object flightDetails = payload.get("flightDetails");
             if (flightDetails instanceof Map) {
                 Map<String, Object> flightDetailsMap = (Map<String, Object>) flightDetails;
-                if (flightDetailsMap.containsKey("totalFlightPrice") && flightDetailsMap.get("totalFlightPrice") != null) {
+                if (flightDetailsMap.containsKey("totalFlightPrice")
+                        && flightDetailsMap.get("totalFlightPrice") != null) {
                     return flightDetailsMap.get("totalFlightPrice");
                 }
                 if (flightDetailsMap.containsKey("amount") && flightDetailsMap.get("amount") != null) {
@@ -421,7 +423,8 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     /**
-     * Extract recipient email from the event payload considering different event types and data structures
+     * Extract recipient email from the event payload considering different event
+     * types and data structures
      */
     private String findRecipientEmail(Map<String, Object> payload, String eventType) {
         // First, try the original location (for backward compatibility)
@@ -549,9 +552,10 @@ public class NotificationServiceImpl implements NotificationService {
 
         return null;
     }
-    
+
     /**
-     * Extract contact information from the event payload considering different event types and data structures
+     * Extract contact information from the event payload considering different
+     * event types and data structures
      */
     private Map<String, Object> extractContactInfo(Map<String, Object> payload, String eventType) {
         // First, try the original location (for backward compatibility)
@@ -579,11 +583,12 @@ public class NotificationServiceImpl implements NotificationService {
                             contactInfo.put("email", email);
                             contactInfo.put("firstName", firstPassenger.get("firstName"));
                             contactInfo.put("lastName", firstPassenger.get("lastName"));
-                            String fullName = String.join(" ", 
-                                (String) firstPassenger.getOrDefault("firstName", ""),
-                                (String) firstPassenger.getOrDefault("lastName", "")).trim();
-                            contactInfo.put("fullName", fullName.isEmpty() ? 
-                                firstPassenger.getOrDefault("firstName", "traveler").toString() : fullName);
+                            String fullName = String.join(" ",
+                                    (String) firstPassenger.getOrDefault("firstName", ""),
+                                    (String) firstPassenger.getOrDefault("lastName", "")).trim();
+                            contactInfo.put("fullName",
+                                    fullName.isEmpty() ? firstPassenger.getOrDefault("firstName", "traveler").toString()
+                                            : fullName);
                             return contactInfo;
                         }
                     }
@@ -607,11 +612,12 @@ public class NotificationServiceImpl implements NotificationService {
                             contactInfo.put("email", email);
                             contactInfo.put("firstName", firstGuest.get("firstName"));
                             contactInfo.put("lastName", firstGuest.get("lastName"));
-                            String fullName = String.join(" ", 
-                                (String) firstGuest.getOrDefault("firstName", ""),
-                                (String) firstGuest.getOrDefault("lastName", "")).trim();
-                            contactInfo.put("fullName", fullName.isEmpty() ? 
-                                firstGuest.getOrDefault("firstName", "traveler").toString() : fullName);
+                            String fullName = String.join(" ",
+                                    (String) firstGuest.getOrDefault("firstName", ""),
+                                    (String) firstGuest.getOrDefault("lastName", "")).trim();
+                            contactInfo.put("fullName",
+                                    fullName.isEmpty() ? firstGuest.getOrDefault("firstName", "traveler").toString()
+                                            : fullName);
                             return contactInfo;
                         }
                     }
@@ -636,11 +642,12 @@ public class NotificationServiceImpl implements NotificationService {
                             contactInfo.put("email", email);
                             contactInfo.put("firstName", firstPassenger.get("firstName"));
                             contactInfo.put("lastName", firstPassenger.get("lastName"));
-                            String fullName = String.join(" ", 
-                                (String) firstPassenger.getOrDefault("firstName", ""),
-                                (String) firstPassenger.getOrDefault("lastName", "")).trim();
-                            contactInfo.put("fullName", fullName.isEmpty() ? 
-                                firstPassenger.getOrDefault("firstName", "traveler").toString() : fullName);
+                            String fullName = String.join(" ",
+                                    (String) firstPassenger.getOrDefault("firstName", ""),
+                                    (String) firstPassenger.getOrDefault("lastName", "")).trim();
+                            contactInfo.put("fullName",
+                                    fullName.isEmpty() ? firstPassenger.getOrDefault("firstName", "traveler").toString()
+                                            : fullName);
                             return contactInfo;
                         }
                     }
@@ -661,11 +668,12 @@ public class NotificationServiceImpl implements NotificationService {
                                 contactInfo.put("email", email);
                                 contactInfo.put("firstName", firstGuest.get("firstName"));
                                 contactInfo.put("lastName", firstGuest.get("lastName"));
-                                String fullName = String.join(" ", 
-                                    (String) firstGuest.getOrDefault("firstName", ""),
-                                    (String) firstGuest.getOrDefault("lastName", "")).trim();
-                                contactInfo.put("fullName", fullName.isEmpty() ? 
-                                    firstGuest.getOrDefault("firstName", "traveler").toString() : fullName);
+                                String fullName = String.join(" ",
+                                        (String) firstGuest.getOrDefault("firstName", ""),
+                                        (String) firstGuest.getOrDefault("lastName", "")).trim();
+                                contactInfo.put("fullName",
+                                        fullName.isEmpty() ? firstGuest.getOrDefault("firstName", "traveler").toString()
+                                                : fullName);
                                 return contactInfo;
                             }
                         }
@@ -685,11 +693,12 @@ public class NotificationServiceImpl implements NotificationService {
                     contactInfo.put("email", email);
                     contactInfo.put("firstName", customerMap.get("firstName"));
                     contactInfo.put("lastName", customerMap.get("lastName"));
-                    String fullName = String.join(" ", 
-                        (String) customerMap.getOrDefault("firstName", ""),
-                        (String) customerMap.getOrDefault("lastName", "")).trim();
-                    contactInfo.put("fullName", fullName.isEmpty() ? 
-                        customerMap.getOrDefault("firstName", "traveler").toString() : fullName);
+                    String fullName = String.join(" ",
+                            (String) customerMap.getOrDefault("firstName", ""),
+                            (String) customerMap.getOrDefault("lastName", "")).trim();
+                    contactInfo.put("fullName",
+                            fullName.isEmpty() ? customerMap.getOrDefault("firstName", "traveler").toString()
+                                    : fullName);
                     return contactInfo;
                 }
             }
@@ -705,11 +714,11 @@ public class NotificationServiceImpl implements NotificationService {
                 contactInfo.put("email", email);
                 contactInfo.put("firstName", guestMap.get("firstName"));
                 contactInfo.put("lastName", guestMap.get("lastName"));
-                String fullName = String.join(" ", 
-                    (String) guestMap.getOrDefault("firstName", ""),
-                    (String) guestMap.getOrDefault("lastName", "")).trim();
-                contactInfo.put("fullName", fullName.isEmpty() ? 
-                    guestMap.getOrDefault("firstName", "traveler").toString() : fullName);
+                String fullName = String.join(" ",
+                        (String) guestMap.getOrDefault("firstName", ""),
+                        (String) guestMap.getOrDefault("lastName", "")).trim();
+                contactInfo.put("fullName",
+                        fullName.isEmpty() ? guestMap.getOrDefault("firstName", "traveler").toString() : fullName);
                 return contactInfo;
             }
         }

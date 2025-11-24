@@ -59,30 +59,6 @@ export const paymentService = {
     }
   },
 
-  /**
-   * Confirm a payment intent
-   */
-  async confirmIntent(paymentIntentId: string): Promise<PaymentIntent> {
-    try {
-      const response = await stripePaymentService.confirmPaymentIntent(paymentIntentId)
-      
-      return {
-        id: response.paymentIntentId,
-        status: response.status as PaymentIntent['status'],
-        clientSecret: response.clientSecret,
-        amount: response.amount,
-        currency: response.currency,
-        description: response.description,
-        paymentMethodId: response.paymentMethodId,
-        customerId: response.customerId,
-        createdAt: response.createdAt,
-        metadata: {}
-      }
-    } catch (error) {
-      console.error('Error confirming payment intent:', error)
-      throw error
-    }
-  },
 
   /**
    * Process a payment
@@ -102,9 +78,9 @@ export const paymentService = {
         id: response.paymentIntentId,
         status: response.status as PaymentIntent['status'],
         clientSecret: response.clientSecret,
-        amount: response.amount,
+        amount: response.amount ?? 0,
         currency: response.currency,
-        description: response.description,
+        description: response.description ?? undefined,
         paymentMethodId: response.paymentMethodId,
         customerId: response.customerId,
         createdAt: response.createdAt,
@@ -115,7 +91,6 @@ export const paymentService = {
       throw error
     }
   },
-
   /**
    * Create a refund
    */
@@ -123,6 +98,7 @@ export const paymentService = {
     try {
       const response = await stripePaymentService.createRefund({
         paymentIntentId: request.paymentIntentId,
+        transactionId: request.transactionId,
         amount: request.amount,
         reason: request.reason as any,
         metadata: request.metadata
@@ -202,6 +178,17 @@ export const paymentService = {
       }))
     } catch (error) {
       console.error('Error getting payment methods:', error)
+      throw error
+    }
+  },
+  /**
+   * Get payment summary by booking ID
+   */
+  async getPaymentSummary(bookingId: string): Promise<any> {
+    try {
+      return await stripePaymentService.getPaymentSummary(bookingId)
+    } catch (error) {
+      console.error('Error getting payment summary:', error)
       throw error
     }
   }
