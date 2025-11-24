@@ -58,4 +58,17 @@ export class HotelService {
     });
     return response.data; // Extract the 'data' field from the ApiResponse wrapper
   }
+  static async getHotelStatistics(): Promise<HotelStatistics> {
+    const response = await apiClient.get<ApiResponse<HotelStatistics>>(`${this.BASE_PATH}/statistics`);
+    return response.data;
+  }
+}
+
+export interface HotelStatistics {
+  totalHotels: number;
+  activeHotels: number;
+  totalRooms: number;
+  availableRooms: number;
+  bookedRooms: number;
+  maintenanceRooms: number;
 }

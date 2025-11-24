@@ -1,5 +1,4 @@
 import { apiClient } from "@/lib/api-client"
-import { filterBookings } from "@/lib/mock-data"
 import type { Booking, PaginatedResponse } from "@/types/api"
 
 export class BookingService {
@@ -38,10 +37,8 @@ export class BookingService {
         last: response.last
       }
     } catch (error) {
-      console.warn("Failed to fetch bookings from API, falling back to mock data:", error)
-      // Fallback to mock implementation
-      await new Promise((resolve) => setTimeout(resolve, 600))
-      return filterBookings(params || {})
+      console.error("Failed to fetch bookings from API:", error)
+      throw error
     }
   }
 
@@ -67,9 +64,8 @@ export class BookingService {
         last: response.last
       }
     } catch (error) {
-      console.warn("Failed to search bookings from API, falling back to mock data:", error)
-      await new Promise((resolve) => setTimeout(resolve, 600))
-      return filterBookings({ search: searchTerm, ...params })
+      console.error("Failed to search bookings from API:", error)
+      throw error
     }
   }
 
@@ -78,13 +74,8 @@ export class BookingService {
       const response = await apiClient.get<Booking>(`${this.BASE_PATH}/${id}`)
       return response
     } catch (error) {
-      console.warn("Failed to fetch booking from API, falling back to mock data:", error)
-      // Fallback to mock implementation
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      const bookings = filterBookings({})
-      const booking = bookings.content.find((b) => b.id === id)
-      if (!booking) throw new Error("Booking not found")
-      return booking
+      console.error("Failed to fetch booking from API:", error)
+      throw error
     }
   }
 
@@ -97,13 +88,8 @@ export class BookingService {
       const response = await apiClient.put<Booking>(`${this.BASE_PATH}/${id}/status?${params.toString()}`)
       return response
     } catch (error) {
-      console.warn("Failed to update booking status via API, using mock response:", error)
-      // Fallback to mock implementation
-      await new Promise((resolve) => setTimeout(resolve, 800))
-      const booking = await this.getBooking(id)
-      const updatedBooking = { ...booking, status, updatedAt: new Date().toISOString() }
-      console.log("Mock: Updated booking status", updatedBooking)
-      return updatedBooking
+      console.error("Failed to update booking status via API:", error)
+      throw error
     }
   }
 
@@ -115,18 +101,8 @@ export class BookingService {
       const response = await apiClient.put<Booking>(`${this.BASE_PATH}/${id}/cancel?${params.toString()}`)
       return response
     } catch (error) {
-      console.warn("Failed to cancel booking via API, using mock response:", error)
-      // Fallback to mock implementation
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      const booking = await this.getBooking(id)
-      const cancelledBooking = {
-        ...booking,
-        status: "CANCELLED" as const,
-        paymentStatus: "REFUNDED" as const,
-        updatedAt: new Date().toISOString(),
-      }
-      console.log("Mock: Cancelled booking", cancelledBooking, "Reason:", reason)
-      return cancelledBooking
+      console.error("Failed to cancel booking via API:", error)
+      throw error
     }
   }
 
@@ -139,25 +115,36 @@ export class BookingService {
       const response = await apiClient.get<BookingSummary>(`${this.BASE_PATH}/summary?${params.toString()}`)
       return response
     } catch (error) {
-      console.warn("Failed to fetch booking summary from API, using mock data:", error)
-      // Fallback to mock implementation
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      const bookings = filterBookings({})
+      console.error("Failed to fetch booking summary from API:", error)
+      throw error
+    }
+  }
+  static async getRevenueAnalytics(year?: number): Promise<RevenueAnalytics> {
+    try {
+      const params = new URLSearchParams()
+      if (year) params.append("year", year.toString())
       
+      const response = await apiClient.get<RevenueAnalytics>(`${this.BASE_PATH}/revenue-analytics?${params.toString()}`)
+      return response
+    } catch (error) {
+      console.error("Failed to fetch revenue analytics:", error)
       return {
-        totalBookings: bookings.totalElements,
-        confirmedBookings: bookings.content.filter(b => b.status === "CONFIRMED").length,
-        pendingBookings: bookings.content.filter(b => b.status === "PENDING").length,
-        cancelledBookings: bookings.content.filter(b => b.status === "CANCELLED").length,
-        totalRevenue: bookings.content.reduce((sum, b) => sum + b.totalAmount, 0),
-        typeBreakdown: {
-          FLIGHT: bookings.content.filter(b => b.type === "FLIGHT").length,
-          HOTEL: bookings.content.filter(b => b.type === "HOTEL").length,
-          COMBO: bookings.content.filter(b => b.type === "COMBO").length,
-        }
+        year: year || new Date().getFullYear(),
+        totalRevenue: 0,
+        monthlyRevenue: []
       }
     }
   }
+}
+
+export interface RevenueAnalytics {
+  year: number
+  totalRevenue: number
+  monthlyRevenue: {
+    month: number
+    revenue: number
+    bookings: number
+  }[]
 }
 
 // Helper types for Spring Boot Page response

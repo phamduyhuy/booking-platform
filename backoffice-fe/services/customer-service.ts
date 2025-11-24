@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client"
-import type { Customer, PaginatedResponse } from "@/types/api"
+import type { Customer, PaginatedResponse, CustomerStatistics } from "@/types/api"
 
 // Define the actual API types based on backend ViewModels
 export interface CustomerAdminVm {
@@ -176,4 +176,19 @@ export class CustomerService {
     console.log("Mock: Updated customer tier", updatedCustomer)
     return updatedCustomer
   }
+  static async getCustomerStatistics(): Promise<CustomerStatistics> {
+    try {
+      const response = await apiClient.get<CustomerStatistics>(`${this.BASE_PATH}/statistics`)
+      return response
+    } catch (error) {
+      console.error("Failed to fetch customer statistics:", error)
+      return {
+        totalCustomers: 0,
+        activeCustomers: 0,
+        newCustomersThisMonth: 0
+      }
+    }
+  }
 }
+
+

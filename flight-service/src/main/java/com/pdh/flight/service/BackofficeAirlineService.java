@@ -37,10 +37,10 @@ public class BackofficeAirlineService {
      * Get all airlines with pagination and filtering for backoffice
      */
     public Map<String, Object> getAllAirlines(int page, int size, String search, String country) {
-        log.info("Fetching airlines for backoffice with search: {}, country: {}, page: {}, size: {}", 
+        log.info("Fetching airlines for backoffice with search: {}, country: {}, page: {}, size: {}",
                 search, country, page, size);
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("name").ascending());
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Airline> airlinePage = airlineRepository.findAll(pageable);
 
         List<AirlineDto> airlineDtos = airlinePage.getContent().stream()
@@ -64,10 +64,10 @@ public class BackofficeAirlineService {
      */
     public AirlineDto getAirline(Long id) {
         log.info("Fetching airline details for backoffice: ID={}", id);
-        
+
         Airline airline = airlineRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Airline not found with ID: " + id));
-        
+
         return airlineMapper.toDto(airline);
     }
 
@@ -80,14 +80,14 @@ public class BackofficeAirlineService {
 
         Airline airline = airlineMapper.toEntity(airlineRequestDto);
         airline = airlineRepository.save(airline);
-        
+
         // Set featured media URL if provided
         if (airlineRequestDto.getFeaturedMediaUrl() != null && !airlineRequestDto.getFeaturedMediaUrl().isEmpty()) {
             airline.setFeaturedMediaUrl(airlineRequestDto.getFeaturedMediaUrl());
             airline = airlineRepository.save(airline); // Save the updated airline with featured media URL
             log.info("Set featured media URL for airline ID: {}", airline.getAirlineId());
         }
-        
+
         log.info("Airline created with ID: {}", airline.getAirlineId());
         return airlineMapper.toDto(airline);
     }
@@ -105,7 +105,7 @@ public class BackofficeAirlineService {
         // Update fields directly
         existingAirline.setName(airlineRequestDto.getName());
         existingAirline.setIataCode(airlineRequestDto.getCode());
-        
+
         Airline updatedAirline = airlineRepository.save(existingAirline);
 
         // Update featured media URL if provided
@@ -131,7 +131,7 @@ public class BackofficeAirlineService {
 
         airline.setIsActive(false);
         airlineRepository.save(airline);
-        
+
         log.info("Airline deleted with ID: {}", id);
     }
 
@@ -141,16 +141,16 @@ public class BackofficeAirlineService {
     @Transactional(readOnly = true)
     public List<AirlineDto> searchAirlinesForStorefront(String query) {
         log.info("Searching airlines for storefront: query={}", query);
-        
+
         if (!StringUtils.hasText(query) || query.trim().length() < 2) {
             return new ArrayList<>();
         }
 
         List<Airline> airlines = airlineRepository.findAll();
-        
+
         return airlines.stream()
                 .filter(airline -> airline.getName().toLowerCase().contains(query.toLowerCase()) ||
-                                   airline.getIataCode().toLowerCase().contains(query.toLowerCase()))
+                        airline.getIataCode().toLowerCase().contains(query.toLowerCase()))
                 .limit(10)
                 .map(airlineMapper::toDto)
                 .collect(Collectors.toList());
@@ -162,18 +162,17 @@ public class BackofficeAirlineService {
     @Transactional(readOnly = true)
     public List<AirlineDto> getPopularAirlines() {
         log.info("Fetching popular airlines for storefront");
-        
+
         // For now, return all active airlines
         // In production, this would be based on booking statistics
         List<Airline> airlines = airlineRepository.findAll();
-        
+
         // Limit to top 10 popular airlines
         return airlineMapper.toDtoList(
-            airlines.stream()
-                .filter(Airline::getIsActive)
-                .limit(10)
-                .collect(Collectors.toList())
-        );
+                airlines.stream()
+                        .filter(Airline::getIsActive)
+                        .limit(10)
+                        .collect(Collectors.toList()));
     }
 
     /**
@@ -181,16 +180,16 @@ public class BackofficeAirlineService {
      */
     public List<Map<String, Object>> searchAirlines(String query) {
         log.info("Searching airlines for autocomplete: query={}", query);
-        
+
         if (!StringUtils.hasText(query) || query.trim().length() < 2) {
             return new ArrayList<>();
         }
 
         List<Airline> airlines = airlineRepository.findAll();
-        
+
         return airlines.stream()
                 .filter(airline -> airline.getName().toLowerCase().contains(query.toLowerCase()) ||
-                                   airline.getIataCode().toLowerCase().contains(query.toLowerCase()))
+                        airline.getIataCode().toLowerCase().contains(query.toLowerCase()))
                 .limit(10)
                 .map(airline -> {
                     Map<String, Object> result = new HashMap<>();
@@ -209,12 +208,12 @@ public class BackofficeAirlineService {
         log.info("Fetching airline statistics for backoffice");
 
         long totalAirlines = airlineRepository.count();
-        
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalAirlines", totalAirlines);
         stats.put("airlinesWithFlights", 0L); // Simplified
         stats.put("countriesCount", 0L); // Simplified
-        
+
         return stats;
     }
 }

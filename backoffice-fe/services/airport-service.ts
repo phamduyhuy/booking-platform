@@ -89,11 +89,12 @@ export class AirportService {
    */
   static async getActiveAirports(): Promise<Airport[]> {
     try {
-      const response: ApiResponse<Airport[]> = await apiClient.get(`${this.BASE_PATH}/active`)
-      return response.data || []
+      // Use paginated endpoint with large size to get all airports
+      const paginatedResponse = await this.getAirports({ page: 0, size: 1000 })
+      return paginatedResponse.content.filter(airport => airport.isActive !== false)
     } catch (error) {
       console.error("Error fetching active airports:", error)
-      throw error
+      return []
     }
   }
 

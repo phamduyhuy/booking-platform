@@ -38,20 +38,22 @@ public class BackofficeFlightScheduleController {
     /**
      * Get all flight schedules with pagination and filtering
      */
-    @Operation(summary = "Get all flight schedules", description = "Retrieve all flight schedules with pagination and filtering")
+    @Operation(summary = "Get all flight schedules", description = "Retrieve all flight schedules with pagination and flexible search")
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAllFlightSchedules(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) Long flightId,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Integer departureAirportId,
+            @RequestParam(required = false) Integer arrivalAirportId) {
 
-        log.info("Fetching flight schedules: page={}, size={}, flightId={}, status={}, date={}", 
-                page, size, flightId, status, date);
-        
+        log.info("Fetching flight schedules: page={}, size={}, search={}, date={}, departureAirportId={}, arrivalAirportId={}", 
+                page, size, search, date, departureAirportId, arrivalAirportId);
+
         try {
-            Map<String, Object> response = backofficeFlightScheduleService.getAllFlightSchedules(page, size, flightId, status, date);
+            Map<String, Object> response = backofficeFlightScheduleService.getAllFlightSchedules(
+                    page, size, search, date, departureAirportId, arrivalAirportId);
             log.info("Found {} flight schedules", ((List<?>) response.getOrDefault("content", List.of())).size());
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
@@ -67,11 +69,10 @@ public class BackofficeFlightScheduleController {
     @Operation(summary = "Get flight schedule by ID", description = "Retrieve a specific flight schedule by its ID")
     @GetMapping("/{scheduleId}")
     public ResponseEntity<ApiResponse<FlightScheduleDto>> getFlightSchedule(
-            @Parameter(description = "Schedule ID", required = true)
-            @PathVariable UUID scheduleId) {
-        
+            @Parameter(description = "Schedule ID", required = true) @PathVariable UUID scheduleId) {
+
         log.info("Fetching flight schedule details: ID={}", scheduleId);
-        
+
         try {
             FlightScheduleDto response = backofficeFlightScheduleService.getFlightSchedule(scheduleId);
             return ResponseEntity.ok(ApiResponse.success(response));
@@ -93,9 +94,9 @@ public class BackofficeFlightScheduleController {
     @PostMapping
     public ResponseEntity<ApiResponse<FlightScheduleDto>> createFlightSchedule(
             @Valid @RequestBody FlightScheduleCreateDto scheduleCreateDto) {
-        
+
         log.info("Creating new flight schedule for flight: {}", scheduleCreateDto.getFlightId());
-        
+
         try {
             FlightScheduleDto response = backofficeFlightScheduleService.createFlightSchedule(scheduleCreateDto);
             log.info("Flight schedule created successfully: {}", response.getScheduleId());
@@ -121,14 +122,14 @@ public class BackofficeFlightScheduleController {
     @Operation(summary = "Update flight schedule", description = "Update an existing flight schedule")
     @PutMapping("/{scheduleId}")
     public ResponseEntity<ApiResponse<FlightScheduleDto>> updateFlightSchedule(
-            @Parameter(description = "Schedule ID", required = true)
-            @PathVariable UUID scheduleId,
+            @Parameter(description = "Schedule ID", required = true) @PathVariable UUID scheduleId,
             @Valid @RequestBody FlightScheduleUpdateDto scheduleUpdateDto) {
-        
+
         log.info("Updating flight schedule: ID={}", scheduleId);
-        
+
         try {
-            FlightScheduleDto response = backofficeFlightScheduleService.updateFlightSchedule(scheduleId, scheduleUpdateDto);
+            FlightScheduleDto response = backofficeFlightScheduleService.updateFlightSchedule(scheduleId,
+                    scheduleUpdateDto);
             log.info("Flight schedule updated successfully: ID={}", scheduleId);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (jakarta.persistence.EntityNotFoundException e) {
@@ -152,11 +153,10 @@ public class BackofficeFlightScheduleController {
     @Operation(summary = "Delete flight schedule", description = "Delete a flight schedule (soft delete)")
     @DeleteMapping("/{scheduleId}")
     public ResponseEntity<ApiResponse<Map<String, String>>> deleteFlightSchedule(
-            @Parameter(description = "Schedule ID", required = true)
-            @PathVariable UUID scheduleId) {
-        
+            @Parameter(description = "Schedule ID", required = true) @PathVariable UUID scheduleId) {
+
         log.info("Deleting flight schedule: ID={}", scheduleId);
-        
+
         try {
             backofficeFlightScheduleService.deleteFlightSchedule(scheduleId);
             Map<String, String> response = new HashMap<>();
@@ -185,7 +185,7 @@ public class BackofficeFlightScheduleController {
     @GetMapping("/statistics")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getFlightScheduleStatistics() {
         log.info("Fetching flight schedule statistics");
-        
+
         try {
             Map<String, Object> response = backofficeFlightScheduleService.getFlightScheduleStatistics();
             return ResponseEntity.ok(ApiResponse.success(response));
@@ -197,18 +197,17 @@ public class BackofficeFlightScheduleController {
     }
 
     // Legacy endpoints for backward compatibility (nested under flights)
-    
+
     /**
      * Get all schedules for a specific flight (legacy endpoint)
      */
     @Operation(summary = "Get schedules for flight", description = "Get all schedules for a specific flight")
     @GetMapping("/flight/{flightId}")
     public ResponseEntity<ApiResponse<List<FlightScheduleDto>>> getSchedulesForFlight(
-            @Parameter(description = "Flight ID", required = true)
-            @PathVariable Long flightId) {
-        
+            @Parameter(description = "Flight ID", required = true) @PathVariable Long flightId) {
+
         log.info("Fetching schedules for flight ID: {}", flightId);
-        
+
         try {
             List<FlightScheduleDto> schedules = flightScheduleService.getSchedulesByFlightId(flightId);
             return ResponseEntity.ok(ApiResponse.success(schedules));
@@ -220,26 +219,26 @@ public class BackofficeFlightScheduleController {
     }
 
     // Flight Data Generation Endpoints
-    
+
     /**
      * Generate flight schedules and fares for a specific date
      */
     @Operation(summary = "Generate daily flight data", description = "Generate flight schedules and fares for a specific date")
     @PostMapping("/generate-daily")
     public ResponseEntity<ApiResponse<Map<String, Object>>> generateDailyFlightData(
-            @RequestParam(required = false) 
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate targetDate) {
-        
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate targetDate) {
+
         log.info("Generating daily flight data for date: {}", targetDate);
-        
+
         try {
             Integer schedulesCreated = flightDataGeneratorService.generateDailyFlightData(targetDate);
-            
+
             Map<String, Object> response = new HashMap<>();
-            response.put("target_date", targetDate != null ? targetDate.toString() : LocalDate.now().plusDays(1).toString());
+            response.put("target_date",
+                    targetDate != null ? targetDate.toString() : LocalDate.now().plusDays(1).toString());
             response.put("schedules_created", schedulesCreated);
             response.put("message", "Flight data generated successfully");
-            
+
             log.info("Generated {} schedules for date: {}", schedulesCreated, targetDate);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
@@ -257,18 +256,18 @@ public class BackofficeFlightScheduleController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> generateFlightDataRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        
+
         log.info("Generating flight data range from {} to {}", startDate, endDate);
-        
+
         try {
             Map<String, Object> result = flightDataGeneratorService.generateFlightDataRange(startDate, endDate);
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("start_date", startDate.toString());
             response.put("end_date", endDate.toString());
             response.put("data", result);
             response.put("message", "Flight data range generated successfully");
-            
+
             log.info("Generated flight data for date range: {} to {}", startDate, endDate);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
@@ -285,17 +284,17 @@ public class BackofficeFlightScheduleController {
     @PostMapping("/generate-next-days")
     public ResponseEntity<ApiResponse<Map<String, Object>>> generateDataForNextDays(
             @RequestParam(defaultValue = "7") Integer numberOfDays) {
-        
+
         log.info("Generating flight data for next {} days", numberOfDays);
-        
+
         try {
             Map<String, Object> result = flightDataGeneratorService.generateDataForNextDays(numberOfDays);
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("number_of_days", numberOfDays);
             response.put("data", result);
             response.put("message", "Flight data generated for next " + numberOfDays + " days");
-            
+
             log.info("Generated flight data for next {} days", numberOfDays);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
@@ -312,17 +311,17 @@ public class BackofficeFlightScheduleController {
     @DeleteMapping("/cleanup")
     public ResponseEntity<ApiResponse<Map<String, Object>>> cleanupOldFlightData(
             @RequestParam(defaultValue = "30") Integer daysToKeep) {
-        
+
         log.info("Cleaning up old flight data, keeping {} days", daysToKeep);
-        
+
         try {
             Integer deletedSchedules = flightDataGeneratorService.cleanupOldFlightData(daysToKeep);
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("days_kept", daysToKeep);
             response.put("deleted_schedules", deletedSchedules);
             response.put("message", "Old flight data cleaned up successfully");
-            
+
             log.info("Cleaned up {} old flight schedules", deletedSchedules);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {

@@ -233,10 +233,10 @@ export const ChatInterface = forwardRef<any, ChatInterfaceProps>(function ChatIn
       </div>
 
       {/* Chat Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 flex flex-col">
         {/* Error Alert */}
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="mb-4 flex-shrink-0">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
@@ -250,7 +250,7 @@ export const ChatInterface = forwardRef<any, ChatInterfaceProps>(function ChatIn
           const isCurrentlyStreaming = isLastMessage && !isUserMessage && isLoading
 
           return (
-            <div key={message.id} className={`flex ${isUserMessage ? "justify-end" : "justify-start"}`}>
+            <div key={message.id} className={`flex flex-shrink-0 ${isUserMessage ? "justify-end" : "justify-start"}`}>
               <div className={cn("space-y-2", isUserMessage ? "max-w-[80%]" : "w-full max-w-full")}>
                 {isUserMessage ? (
                   <div className="bg-blue-600 text-white rounded-2xl px-4 py-2">

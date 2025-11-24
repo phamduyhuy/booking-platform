@@ -62,8 +62,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("SELECT b FROM Booking b WHERE " +
            "(:bookingType IS NULL OR b.bookingType = :bookingType) AND " +
            "(:status IS NULL OR b.status = :status) AND " +
-           "(:startDate IS NULL OR DATE(b.createdAt) >= :startDate) AND " +
-           "(:endDate IS NULL OR DATE(b.createdAt) <= :endDate) " +
+           "(:startDate IS NULL OR CAST(b.createdAt AS date) >= :startDate) AND " +
+           "(:endDate IS NULL OR CAST(b.createdAt AS date) <= :endDate) " +
            "ORDER BY b.createdAt DESC")
     Page<Booking> findBookingsWithFilters(@Param("bookingType") BookingType bookingType,
                                          @Param("status") BookingStatus status,
@@ -132,16 +132,16 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      * Count bookings in a date period
      */
     @Query("SELECT COUNT(b) FROM Booking b WHERE " +
-           "(:startDate IS NULL OR DATE(b.createdAt) >= :startDate) AND " +
-           "(:endDate IS NULL OR DATE(b.createdAt) <= :endDate)")
+           "(:startDate IS NULL OR CAST(b.createdAt AS date) >= :startDate) AND " +
+           "(:endDate IS NULL OR CAST(b.createdAt AS date) <= :endDate)")
     Long countBookingsInPeriod(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
     /**
      * Count bookings by type in a period
      */
     @Query("SELECT COUNT(b) FROM Booking b WHERE b.bookingType = :bookingType AND " +
-           "(:startDate IS NULL OR DATE(b.createdAt) >= :startDate) AND " +
-           "(:endDate IS NULL OR DATE(b.createdAt) <= :endDate)")
+           "(:startDate IS NULL OR CAST(b.createdAt AS date) >= :startDate) AND " +
+           "(:endDate IS NULL OR CAST(b.createdAt AS date) <= :endDate)")
     Long countBookingsByTypeInPeriod(@Param("bookingType") BookingType bookingType,
                                    @Param("startDate") LocalDate startDate,
                                    @Param("endDate") LocalDate endDate);
@@ -150,8 +150,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      * Count bookings by status in a period
      */
     @Query("SELECT COUNT(b) FROM Booking b WHERE b.status = :status AND " +
-           "(:startDate IS NULL OR DATE(b.createdAt) >= :startDate) AND " +
-           "(:endDate IS NULL OR DATE(b.createdAt) <= :endDate)")
+           "(:startDate IS NULL OR CAST(b.createdAt AS date) >= :startDate) AND " +
+           "(:endDate IS NULL OR CAST(b.createdAt AS date) <= :endDate)")
     Long countBookingsByStatusInPeriod(@Param("status") BookingStatus status,
                                      @Param("startDate") LocalDate startDate,
                                      @Param("endDate") LocalDate endDate);
@@ -160,16 +160,16 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      * Get total revenue in a period
      */
     @Query("SELECT SUM(b.totalAmount) FROM Booking b WHERE b.status = 'CONFIRMED' AND " +
-           "(:startDate IS NULL OR DATE(b.createdAt) >= :startDate) AND " +
-           "(:endDate IS NULL OR DATE(b.createdAt) <= :endDate)")
+           "(:startDate IS NULL OR CAST(b.createdAt AS date) >= :startDate) AND " +
+           "(:endDate IS NULL OR CAST(b.createdAt AS date) <= :endDate)")
     Double getTotalRevenueInPeriod(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
     /**
      * Get average booking value in a period
      */
     @Query("SELECT AVG(b.totalAmount) FROM Booking b WHERE b.status = 'CONFIRMED' AND " +
-           "(:startDate IS NULL OR DATE(b.createdAt) >= :startDate) AND " +
-           "(:endDate IS NULL OR DATE(b.createdAt) <= :endDate)")
+           "(:startDate IS NULL OR CAST(b.createdAt AS date) >= :startDate) AND " +
+           "(:endDate IS NULL OR CAST(b.createdAt AS date) <= :endDate)")
     Double getAverageBookingValueInPeriod(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
     // === ANALYTICS QUERY METHODS ===
@@ -179,8 +179,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      */
     @Query(value = "SELECT product_details->>'destinationAirport' as destination, COUNT(*) as booking_count " +
                    "FROM bookings WHERE booking_type = 'FLIGHT' AND status = 'CONFIRMED' AND " +
-                   "(:startDate IS NULL OR DATE(created_at) >= :startDate) AND " +
-                   "(:endDate IS NULL OR DATE(created_at) <= :endDate) " +
+                   "(:startDate IS NULL OR CAST(created_at AS date) >= CAST(:startDate AS date)) AND " +
+                   "(:endDate IS NULL OR CAST(created_at AS date) <= CAST(:endDate AS date)) " +
                    "GROUP BY product_details->>'destinationAirport' " +
                    "ORDER BY booking_count DESC LIMIT 10", nativeQuery = true)
     List<Map<String, Object>> getPopularFlightDestinations(@Param("startDate") LocalDate startDate,
@@ -191,8 +191,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      */
     @Query(value = "SELECT product_details->>'city' as destination, COUNT(*) as booking_count " +
                    "FROM bookings WHERE booking_type = 'HOTEL' AND status = 'CONFIRMED' AND " +
-                   "(:startDate IS NULL OR DATE(created_at) >= :startDate) AND " +
-                   "(:endDate IS NULL OR DATE(created_at) <= :endDate) " +
+                   "(:startDate IS NULL OR CAST(created_at AS date) >= CAST(:startDate AS date)) AND " +
+                   "(:endDate IS NULL OR CAST(created_at AS date) <= CAST(:endDate AS date)) " +
                    "GROUP BY product_details->>'city' " +
                    "ORDER BY booking_count DESC LIMIT 10", nativeQuery = true)
     List<Map<String, Object>> getPopularHotelDestinations(@Param("startDate") LocalDate startDate,
@@ -201,11 +201,11 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     /**
      * Get daily revenue
      */
-    @Query(value = "SELECT DATE(created_at) as date, SUM(total_amount) as revenue " +
+    @Query(value = "SELECT CAST(created_at AS date) as date, SUM(total_amount) as revenue " +
                    "FROM bookings WHERE status = 'CONFIRMED' AND " +
-                   "(:startDate IS NULL OR DATE(created_at) >= :startDate) AND " +
-                   "(:endDate IS NULL OR DATE(created_at) <= :endDate) " +
-                   "GROUP BY DATE(created_at) ORDER BY date", nativeQuery = true)
+                   "(:startDate IS NULL OR CAST(created_at AS date) >= CAST(:startDate AS date)) AND " +
+                   "(:endDate IS NULL OR CAST(created_at AS date) <= CAST(:endDate AS date)) " +
+                   "GROUP BY CAST(created_at AS date) ORDER BY date", nativeQuery = true)
     List<Map<String, Object>> getDailyRevenue(@Param("startDate") LocalDate startDate,
                                             @Param("endDate") LocalDate endDate);
 
@@ -214,8 +214,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      */
     @Query(value = "SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue " +
                    "FROM bookings WHERE status = 'CONFIRMED' AND " +
-                   "(:startDate IS NULL OR DATE(created_at) >= :startDate) AND " +
-                   "(:endDate IS NULL OR DATE(created_at) <= :endDate) " +
+                   "(:startDate IS NULL OR CAST(created_at AS date) >= CAST(:startDate AS date)) AND " +
+                   "(:endDate IS NULL OR CAST(created_at AS date) <= CAST(:endDate AS date)) " +
                    "GROUP BY DATE_TRUNC('month', created_at) ORDER BY month", nativeQuery = true)
     List<Map<String, Object>> getMonthlyRevenue(@Param("startDate") LocalDate startDate,
                                               @Param("endDate") LocalDate endDate);
@@ -225,8 +225,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
      */
     @Query(value = "SELECT booking_type, SUM(total_amount) as revenue, COUNT(*) as booking_count " +
                    "FROM bookings WHERE status = 'CONFIRMED' AND " +
-                   "(:startDate IS NULL OR DATE(created_at) >= :startDate) AND " +
-                   "(:endDate IS NULL OR DATE(created_at) <= :endDate) " +
+                   "(:startDate IS NULL OR CAST(created_at AS date) >= CAST(:startDate AS date)) AND " +
+                   "(:endDate IS NULL OR CAST(created_at AS date) <= CAST(:endDate AS date)) " +
                    "GROUP BY booking_type ORDER BY revenue DESC", nativeQuery = true)
     List<Map<String, Object>> getRevenueByBookingType(@Param("startDate") LocalDate startDate,
                                                      @Param("endDate") LocalDate endDate);

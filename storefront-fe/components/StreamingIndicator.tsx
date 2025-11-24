@@ -27,9 +27,9 @@ export function CardSkeleton({ className }: { className?: string }) {
  */
 export function ResultsSkeleton({ count = 3 }: { count?: number }) {
   return (
-    <div className="space-y-3">
-      <div className="skeleton-loading h-5 w-40 rounded mb-2" />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="space-y-3 flex-shrink-0">
+      <div className="skeleton-loading h-5 w-40 rounded mb-2 flex-shrink-0" />
+      <div className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: count }).map((_, i) => (
           <CardSkeleton key={i} />
         ))}

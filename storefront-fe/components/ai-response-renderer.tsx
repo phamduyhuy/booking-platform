@@ -574,53 +574,57 @@ export function AiResponseRenderer({
   return (
     <div className="space-y-4">
       {/* AI Message Text */}
-      <div className="prose prose-sm max-w-none">
-        {showSkeleton ? (
-          <div className="space-y-3" aria-live="polite">
-            <span className="sr-only">AI đang xử lý yêu cầu của bạn</span>
-            <ResultsSkeleton count={2} />
-          </div>
-        ) : (
-          message.trim() && <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">{message}</div>
-        )}
-      </div>
-
-      {/* Results */}
-      {hasAnyResults && (
+      {showSkeleton ? (
+        <div className="flex items-center gap-2 text-gray-500">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
+          <span>AI đang xử lý yêu cầu của bạn...</span>
+        </div>
+      ) : (
         <>
-          {/* Flight Results */}
-          {flightResults.length > 0 && (
-              <FlightResultsSection
-                  results={flightResults}
-                  onViewDetails={handleFlightViewDetails}
-                  onBook={handleFlightViewDetails}
-                  onLocationClick={onLocationClick}
-                  canBook={canBook}
-              />
+          {message.trim() && (
+            <div className="prose prose-sm max-w-none">
+              <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">{message}</div>
+            </div>
           )}
 
-          {/* Hotel Results */}
-          {hotelResults.length > 0 && (
-              <HotelResultsSection
-                  results={hotelResults}
-                  onViewDetails={handleHotelViewDetails}
-                  onBook={handleHotelViewDetails}
-                  onLocationClick={onLocationClick}
-                  canBook={canBook}
-              />
-          )}
+          {/* Results */}
+          {hasAnyResults && (
+            <>
+              {/* Flight Results */}
+              {flightResults.length > 0 && (
+                  <FlightResultsSection
+                      results={flightResults}
+                      onViewDetails={handleFlightViewDetails}
+                      onBook={handleFlightViewDetails}
+                      onLocationClick={onLocationClick}
+                      canBook={canBook}
+                  />
+              )}
 
-          {/* Info Results */}
-          {infoResults.length > 0 && (
+              {/* Hotel Results */}
+              {hotelResults.length > 0 && (
+                  <HotelResultsSection
+                      results={hotelResults}
+                      onViewDetails={handleHotelViewDetails}
+                      onBook={handleHotelViewDetails}
+                      onLocationClick={onLocationClick}
+                      canBook={canBook}
+                  />
+              )}
+
+              {/* Info Results */}
+              {infoResults.length > 0 && (
               <InfoResultsSection
                   results={infoResults}
                   onLocationClick={onLocationClick}
               />
           )}
+            </>
+          )}
         </>
       )}
 
-      {/* Confirmation UI */}
+      {/* Confirmation Section */}
       {requiresConfirmation && confirmationContext && (
         <ConfirmationSection
           context={confirmationContext}

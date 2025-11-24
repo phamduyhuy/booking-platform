@@ -344,9 +344,9 @@ spring:
             booking-mcp-server:
               url: http://booking-service
               sse-endpoint: /bookings/sse
-            # payment-mcp-server:
-            #   url: http://payment-service
-            #   sse-endpoint: /payments/sse
+            payment-mcp-server:
+              url: http://payment-service
+              sse-endpoint: /payments/sse
 
         stdio:
           connections:
@@ -388,7 +388,7 @@ spring:
                 - mcp/brave-search
               env:
                 BRAVE_API_KEY: ${BRAVE_API_KEY}
-                BRAVE_MCP_DISABLED_TOOLS: brave_news_search brave_web_search brave_summarizer brave_local_search
+                BRAVE_MCP_DISABLED_TOOLS: brave_news_search brave_web_search brave_summarizer
         initialized: true
 
 app:

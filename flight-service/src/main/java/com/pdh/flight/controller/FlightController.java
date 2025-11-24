@@ -799,19 +799,24 @@ public class FlightController {
         }
         
         String trimmed = cityOrIataCode.trim();
-        // If already an IATA code, return as is
-        if (trimmed.length() == 3 && trimmed.equals(trimmed.toUpperCase())) {
-            return trimmed;
-        }
-
         
-        // Try to resolve city name to IATA code
+        // Always try to resolve through city mapping service first
+        // This handles cases like "HCM" -> "SGN", "Saigon" -> "SGN", etc.
         List<String> iataCodes = cityMappingService.getIataCodesForCity(trimmed);
         if (!iataCodes.isEmpty()) {
             log.debug("Resolved city '{}' to IATA code '{}'", trimmed, iataCodes.get(0));
             return iataCodes.get(0);
         }
-        //Try to resolve city name to IATA code
+        
+        // If it looks like an IATA code (3 uppercase letters) and wasn't mapped,
+        // check if it's a valid IATA code by checking if we have city data for it
+        if (trimmed.length() == 3 && trimmed.equals(trimmed.toUpperCase())) {
+            String cityName = cityMappingService.getCityNameForIataCode(trimmed);
+            if (cityName != null) {
+                log.debug("Input '{}' is a valid IATA code for city '{}'", trimmed, cityName);
+                return trimmed;
+            }
+        }
         
         // If no resolution found, return original input for flexible search
         log.debug("Could not resolve city '{}' to IATA code, using original input", trimmed);

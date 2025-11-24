@@ -13,6 +13,9 @@ import com.pdh.payment.model.enums.PaymentTransactionType;
 import com.pdh.payment.repository.PaymentMethodRepository;
 import com.pdh.payment.repository.PaymentRepository;
 import com.pdh.payment.repository.PaymentTransactionRepository;
+import com.stripe.exception.StripeException;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.Charge;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -468,22 +471,7 @@ public class BackofficePaymentService {
         }
     }
 
-    /**
-     * Reconcile payment with gateway
-     */
-    @Transactional
-    public Payment reconcilePayment(UUID paymentId) {
-        log.info("Reconciling payment: {}", paymentId);
 
-        Payment payment = getPaymentById(paymentId);
-        
-        // This would integrate with your payment gateway to check status
-        // For now, implement a placeholder
-        
-        payment = paymentRepository.save(payment);
-
-        return payment;
-    }
 
     /**
      * Get user payment methods
@@ -579,5 +567,159 @@ public class BackofficePaymentService {
             log.error("Failed to publish payment event", e);
             // Don't fail the transaction for event publishing errors
         }
+    }
+   
+    /**
+     * Reconcile payment with Stripe gateway
+     */
+    @Transactional
+    public Map<String, Object> reconcilePayment(UUID paymentId) {
+        log.info("Reconciling payment with Stripe: {}", paymentId);
+        
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("paymentId", paymentId.toString());
+        result.put("paymentReference", payment.getPaymentReference());
+        result.put("localStatus", payment.getStatus().name());
+        
+        if (payment.getProvider() != PaymentProvider.STRIPE) {
+            result.put("error", "Only Stripe payments can be reconciled");
+            return result;
+        }
+        
+        List<PaymentTransaction> transactions = paymentTransactionRepository
+                .findByPayment_PaymentIdOrderByCreatedAtDesc(paymentId);
+        
+        if (transactions.isEmpty()) {
+            result.put("error", "No transactions found");
+            return result;
+        }
+        
+        PaymentTransaction latest = transactions.get(0);
+        String gatewayId = latest.getGatewayTransactionId();
+        
+        if (gatewayId == null || gatewayId.isBlank()) {
+            result.put("error", "No Stripe transaction ID");
+            return result;
+        }
+        
+        try {
+            // Retrieve PaymentIntent with expanded latest_charge
+            Map<String, Object> params = new HashMap<>();
+            params.put("expand", new String[]{"latest_charge"});
+            PaymentIntent pi = PaymentIntent.retrieve(gatewayId, params, null);
+            
+            // Stripe data
+            result.put("stripePaymentIntentId", pi.getId());
+            result.put("stripeStatus", pi.getStatus());
+            result.put("stripeAmount", pi.getAmount()); // Stripe stores in cents
+            result.put("stripeCurrency", pi.getCurrency());
+            result.put("stripeCreated", pi.getCreated());
+            
+            // Local DB data for comparison
+            result.put("localAmount", payment.getAmount().multiply(new java.math.BigDecimal("100")).longValue()); // Convert to cents
+            result.put("localCurrency", payment.getCurrency());
+            result.put("localTransactionStatus", latest.getStatus().name());
+            
+            // Check latest charge (expanded)
+            if (pi.getLatestChargeObject() != null) {
+                Charge charge = pi.getLatestChargeObject();
+                result.put("stripePaid", charge.getPaid());
+                result.put("stripeRefunded", charge.getRefunded());
+                result.put("stripeAmountCaptured", charge.getAmountCaptured());
+                result.put("stripeAmountRefunded", charge.getAmountRefunded());
+                
+                if (charge.getFailureCode() != null) {
+                    result.put("stripeFailureCode", charge.getFailureCode());
+                    result.put("stripeFailureMessage", charge.getFailureMessage());
+                }
+            }
+            
+            // Compare status
+            PaymentStatus mappedStripeStatus = mapStripeStatus(pi.getStatus());
+            boolean statusMatches = payment.getStatus() == mappedStripeStatus;
+            boolean transactionStatusMatches = latest.getStatus() == mappedStripeStatus;
+            
+            // Compare amount (Stripe uses cents, we use decimal)
+            long stripeAmountCents = pi.getAmount();
+            long localAmountCents = payment.getAmount().multiply(new java.math.BigDecimal("100")).longValue();
+            boolean amountMatches = stripeAmountCents == localAmountCents;
+            
+            // Compare currency
+            boolean currencyMatches = pi.getCurrency().equalsIgnoreCase(payment.getCurrency());
+            
+            result.put("mappedStripeStatus", mappedStripeStatus.name());
+            result.put("statusMatches", statusMatches);
+            result.put("transactionStatusMatches", transactionStatusMatches);
+            result.put("amountMatches", amountMatches);
+            result.put("currencyMatches", currencyMatches);
+            result.put("reconciled", true);
+            
+            // Build discrepancy list
+            java.util.List<String> discrepancies = new java.util.ArrayList<>();
+            if (!statusMatches) {
+                discrepancies.add(String.format("Payment status: Local=%s, Stripe=%s", 
+                        payment.getStatus(), pi.getStatus()));
+            }
+            if (!transactionStatusMatches) {
+                discrepancies.add(String.format("Transaction status: Local=%s, Stripe=%s", 
+                        latest.getStatus(), pi.getStatus()));
+            }
+            if (!amountMatches) {
+                discrepancies.add(String.format("Amount: Local=%d cents, Stripe=%d cents", 
+                        localAmountCents, stripeAmountCents));
+            }
+            if (!currencyMatches) {
+                discrepancies.add(String.format("Currency: Local=%s, Stripe=%s", 
+                        payment.getCurrency(), pi.getCurrency()));
+            }
+            
+            if (!discrepancies.isEmpty()) {
+                result.put("discrepancies", discrepancies);
+                result.put("needsAttention", true);
+                
+                // Auto-update if Stripe status is definitive and different
+                if (!statusMatches && shouldAutoUpdate(pi.getStatus())) {
+                    log.warn("Auto-updating payment {} from {} to {} based on Stripe status", 
+                            paymentId, payment.getStatus(), mappedStripeStatus);
+                    
+                    payment.setStatus(mappedStripeStatus);
+                    latest.setStatus(mappedStripeStatus);
+                    latest.setGatewayStatus(pi.getStatus());
+                    paymentRepository.save(payment);
+                    paymentTransactionRepository.save(latest);
+                    
+                    result.put("autoUpdated", true);
+                    result.put("updatedFields", java.util.List.of("paymentStatus", "transactionStatus"));
+                    
+                    publishPaymentEvent(payment, "PAYMENT_RECONCILED");
+                }
+            } else {
+                result.put("needsAttention", false);
+                result.put("message", "Payment data is in sync with Stripe");
+            }
+            
+        } catch (StripeException e) {
+            result.put("error", "Stripe API error: " + e.getMessage());
+            result.put("stripeErrorCode", e.getCode());
+        }
+        
+        return result;
+    }
+    
+    private PaymentStatus mapStripeStatus(String s) {
+        return switch (s.toLowerCase()) {
+            case "succeeded" -> PaymentStatus.COMPLETED;
+            case "processing" -> PaymentStatus.PROCESSING;
+            case "canceled" -> PaymentStatus.CANCELLED;
+            case "requires_capture" -> PaymentStatus.PROCESSING;
+            default -> PaymentStatus.PENDING;
+        };
+    }
+    
+    private boolean shouldAutoUpdate(String s) {
+        return "succeeded".equalsIgnoreCase(s) || "canceled".equalsIgnoreCase(s);
     }
 }
