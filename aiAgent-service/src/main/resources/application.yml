@@ -5,15 +5,15 @@ server:
   tomcat:
     max-http-form-post-size: 20MB
     max-swallow-size: 20MB
-    connection-timeout: 600000  # 10 minutes in milliseconds
+    connection-timeout: 600000 # 10 minutes in milliseconds
     threads:
       max: 200
       min-spare: 10
   # WebSocket configuration for long AI processing
   websocket:
-    max-idle-timeout: 600000  # 10 minutes
-    max-text-message-buffer-size: 1048576  # 1MB
-    max-binary-message-buffer-size: 1048576  # 1MB
+    max-idle-timeout: 600000 # 10 minutes
+    max-text-message-buffer-size: 1048576 # 1MB
+    max-binary-message-buffer-size: 1048576 # 1MB
 
   # Vector store configuration for default profile
 
@@ -136,14 +136,11 @@ spring:
           model: mistral-embed
 
     vectorstore:
-      
       elasticsearch:
         initialize-schema: true
         index-name: bookingsmart-rag-index
         dimensions: 1024
         similarity: cosine
-        
-
 
     mcp:
       client:
@@ -166,9 +163,6 @@ spring:
             customer-server:
               url: http://localhost:8084
               sse-endpoint: /customers/sse
-            payment-server:
-              url: http://localhost:8085
-              sse-endpoint: /payments/sse
         stdio:
           connections:
             openweather:
@@ -263,8 +257,6 @@ spring:
           min-idle: 0
   elasticsearch:
     uris: ${ELASTIC_URIS}
-  
-    
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -315,7 +307,6 @@ spring:
       api-key: ${MISTRAL_API_KEY}
       chat:
         options:
-
           model: mistral-medium-2508
           temperature: 0.0
     google:
@@ -325,11 +316,9 @@ spring:
         chat:
           options:
             model: gemini-2.5-pro
-            temperature: 0.3
+            temperature: 0.1
             use-cached-content: true
-            auto-cache-ttl: 86400  # 1 day in seconds
-
-
+            auto-cache-ttl: 86400 # 1 day in seconds
 
     mcp:
       client:
@@ -340,7 +329,7 @@ spring:
         name: bookingsmart
         root-change-notification: true
         toolcallback.enabled: true
-        
+
         sse:
           connections:
             hotel-mcp-server:
@@ -355,10 +344,10 @@ spring:
             booking-mcp-server:
               url: http://booking-service
               sse-endpoint: /bookings/sse
-            payment-mcp-server:
-              url: http://payment-service
-              sse-endpoint: /payments/sse
-        
+            # payment-mcp-server:
+            #   url: http://payment-service
+            #   sse-endpoint: /payments/sse
+
         stdio:
           connections:
             openweather:
@@ -399,18 +388,14 @@ spring:
                 - mcp/brave-search
               env:
                 BRAVE_API_KEY: ${BRAVE_API_KEY}
-                BRAVE_MCP_DISABLED_TOOLS: brave_news_search brave_web_search brave_summarizer	
+                BRAVE_MCP_DISABLED_TOOLS: brave_news_search brave_web_search brave_summarizer brave_local_search
         initialized: true
-
-
-
 
 app:
   flight-service:
     url: http://flight-service
   hotel-service:
     url: http://hotel-service
-
 
 eureka:
   client:

@@ -233,7 +233,7 @@ class AiChatService {
 
     const requestId = this.generateRequestId();
     const conversationId = options.conversationId ?? this.generateConversationId();
-    
+
     console.log('📤 Sending message via WebSocket:', {
       requestId,
       conversationId,
@@ -318,7 +318,7 @@ class AiChatService {
    * Note: userId is automatically extracted from JWT token on backend
    */
   async sendMessage(
-    message: string, 
+    message: string,
     context?: ChatContext
   ): Promise<ChatResponse> {
     const trimmed = message.trim();
@@ -349,33 +349,14 @@ class AiChatService {
     } catch (error: any) {
       console.error('AI Chat Service Error:', error);
 
-      // Attempt REST fallback if WebSocket fails
-      try {
-        const fallback = await this.sendPromptRest(message, { conversationId });
-        const suggestions = fallback.nextRequestSuggestions ?? fallback.next_request_suggestions ?? [];
-        return {
-          userMessage: message,
-          aiResponse: fallback.aiResponse ?? '',
-          conversationId: fallback.conversationId ?? conversationId,
-          requestId: fallback.requestId,
-          userId: fallback.userId,
-          timestamp: this.normalizeTimestamp(fallback.timestamp),
-          results: fallback.results ?? [],
-          nextRequestSuggestions: suggestions,
-          requiresConfirmation: fallback.requiresConfirmation,
-          confirmationContext: fallback.confirmationContext,
-        };
-      } catch (restError: any) {
-        console.error('AI Chat REST fallback error:', restError);
-      }
-
-      // Return a fallback response
+      // Force WebSocket only - no REST fallback
+      // Return error response directly
       return {
         userMessage: message,
-        aiResponse: 'Xin lỗi, tôi đang gặp sự cố kỹ thuật. Vui lòng thử lại sau.',
+        aiResponse: 'Xin lỗi, tôi đang gặp sự cố kết nối. Vui lòng thử lại sau.',
         conversationId,
         timestamp: new Date().toISOString(),
-        error: error?.message || 'Không thể kết nối với AI service',
+        error: error?.message || 'Không thể kết nối với AI service (WebSocket)',
         results: [],
         nextRequestSuggestions: []
       };
@@ -437,7 +418,7 @@ class AiChatService {
     try {
       return [
         "Tìm chuyến bay từ Hồ Chí Minh đến Đà Nẵng",
-        "Gợi ý khách sạn 4 sao tại Đà Nẵng", 
+        "Gợi ý khách sạn 4 sao tại Đà Nẵng",
         "Lập kế hoạch du lịch 3 ngày 2 đêm",
         "Tìm địa điểm ăn uống ngon tại Hội An"
       ];

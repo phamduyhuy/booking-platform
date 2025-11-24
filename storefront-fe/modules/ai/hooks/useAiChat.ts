@@ -368,10 +368,10 @@ export function useAiChat(options: UseAiChatOptions = {}): UseAiChatReturn {
             });
 
             refreshChatConversations().catch((err) => {
-                console.error('Failed to refresh conversations:', refreshErr);
+                console.error('Failed to refresh conversations:', err);
             });
         } catch (err: any) {
-            console.log('⚠️ WebSocket failed, attempting REST fallback...');
+            console.error('⚠️ WebSocket failed, attempting REST fallback...',error);
             
             try {
                 const fallbackResponse = await aiChatService.sendPromptRest(trimmedMessage, {

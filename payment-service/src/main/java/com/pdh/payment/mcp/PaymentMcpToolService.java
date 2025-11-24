@@ -41,18 +41,14 @@ public class PaymentMcpToolService {
      * Get payment methods stored in our database with Stripe payment method IDs
      * AI Agent uses these IDs with the payment MCP tools for secure charging
      */
-    @McpTool(
-        name = "get_user_stored_payment_methods",
-        description = "Get payment methods stored in BookingSmart database. Returns Stripe payment method IDs " +
-                "(pm_xxx) that are required by the payment MCP `process_payment` tool. " +
-                "Each method includes: methodId (our DB ID), stripePaymentMethodId (use for charging), " +
-                "stripeCustomerId (if available), displayName, card details, and isDefault flag. " +
-                "IMPORTANT: Use the stripePaymentMethodId with process_payment, not our methodId."
-    )
+    @McpTool(name = "get_user_stored_payment_methods", description = "Get payment methods stored in BookingSmart database. Returns Stripe payment method IDs "
+            +
+            "(pm_xxx) that are required by the payment MCP `process_payment` tool. " +
+            "Each method includes: methodId (our DB ID), stripePaymentMethodId (use for charging), " +
+            "stripeCustomerId (if available), displayName, card details, and isDefault flag. " +
+            "IMPORTANT: Use the stripePaymentMethodId with process_payment, not our methodId.")
     public Map<String, Object> getUserStoredPaymentMethods(
-            @McpToolParam(description = "User ID to get payment methods for (UUID format)")
-            String userId
-    ) {
+            @McpToolParam(description = "User ID to get payment methods for (UUID format)") String userId) {
         try {
             log.info("AI Tool: Getting payment methods for user={}", userId);
 
@@ -62,65 +58,64 @@ public class PaymentMcpToolService {
 
             if (paymentMethods.isEmpty()) {
                 return Map.of(
-                    "success", true,
-                    "paymentMethods", Collections.emptyList(),
-                    "message", "No payment methods found. User needs to add a payment method first.",
-                    "suggestion", "User should add a credit card or other payment method before making a booking."
-                );
+                        "success", true,
+                        "paymentMethods", Collections.emptyList(),
+                        "message", "No payment methods found. User needs to add a payment method first.",
+                        "suggestion", "User should add a credit card or other payment method before making a booking.");
             }
 
             List<Map<String, Object>> methods = paymentMethods.stream()
-                .map(pm -> {
-                    Map<String, Object> methodMap = new LinkedHashMap<>();
-                    methodMap.put("methodId", pm.getMethodId().toString());
-                    methodMap.put("displayName", pm.getDisplayName());
-                    methodMap.put("methodType", pm.getMethodType().toString());
-                    methodMap.put("provider", pm.getProvider().toString());
-                    methodMap.put("isDefault", pm.getIsDefault());
-                    
-                    // Card details if available
-                    if (pm.getCardLastFour() != null) {
-                        methodMap.put("cardLastFour", pm.getCardLastFour());
-                    }
-                    if (pm.getCardBrand() != null) {
-                        methodMap.put("cardBrand", pm.getCardBrand());
-                    }
-                    if (pm.getCardExpiryMonth() != null && pm.getCardExpiryYear() != null) {
-                        methodMap.put("cardExpiry", String.format("%02d/%d", 
-                                pm.getCardExpiryMonth(), pm.getCardExpiryYear()));
-                    }
-                    
-                    // Extract Stripe data from provider metadata
-                    StripeProviderDetails stripeDetails = extractStripeProviderDetails(pm);
-                    if (stripeDetails.hasPaymentMethodId()) {
-                        methodMap.put("stripePaymentMethodId", stripeDetails.getPaymentMethodId());
-                    }
-                    if (stripeDetails.hasCustomerId()) {
-                        methodMap.put("stripeCustomerId", stripeDetails.getCustomerId());
-                    }
-                    
-                    // Bank details if available
-                    if (pm.getBankName() != null) {
-                        methodMap.put("bankName", pm.getBankName());
-                    }
-                    if (pm.getBankAccountLastFour() != null) {
-                        methodMap.put("accountLastFour", pm.getBankAccountLastFour());
-                    }
-                    
-                    return methodMap;
-                })
-                .collect(Collectors.toList());
+                    .map(pm -> {
+                        Map<String, Object> methodMap = new LinkedHashMap<>();
+                        methodMap.put("methodId", pm.getMethodId().toString());
+                        methodMap.put("displayName", pm.getDisplayName());
+                        methodMap.put("methodType", pm.getMethodType().toString());
+                        methodMap.put("provider", pm.getProvider().toString());
+                        methodMap.put("isDefault", pm.getIsDefault());
+
+                        // Card details if available
+                        if (pm.getCardLastFour() != null) {
+                            methodMap.put("cardLastFour", pm.getCardLastFour());
+                        }
+                        if (pm.getCardBrand() != null) {
+                            methodMap.put("cardBrand", pm.getCardBrand());
+                        }
+                        if (pm.getCardExpiryMonth() != null && pm.getCardExpiryYear() != null) {
+                            methodMap.put("cardExpiry", String.format("%02d/%d",
+                                    pm.getCardExpiryMonth(), pm.getCardExpiryYear()));
+                        }
+
+                        // Extract Stripe data from provider metadata
+                        StripeProviderDetails stripeDetails = extractStripeProviderDetails(pm);
+                        if (stripeDetails.hasPaymentMethodId()) {
+                            methodMap.put("stripePaymentMethodId", stripeDetails.getPaymentMethodId());
+                        }
+                        if (stripeDetails.hasCustomerId()) {
+                            methodMap.put("stripeCustomerId", stripeDetails.getCustomerId());
+                        }
+
+                        // Bank details if available
+                        if (pm.getBankName() != null) {
+                            methodMap.put("bankName", pm.getBankName());
+                        }
+                        if (pm.getBankAccountLastFour() != null) {
+                            methodMap.put("accountLastFour", pm.getBankAccountLastFour());
+                        }
+
+                        return methodMap;
+                    })
+                    .collect(Collectors.toList());
 
             // Find default method
             Optional<PaymentMethod> defaultMethod = paymentMethods.stream()
-                .filter(PaymentMethod::getIsDefault)
-                .findFirst();
+                    .filter(PaymentMethod::getIsDefault)
+                    .findFirst();
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("success", true);
             response.put("paymentMethods", methods);
             response.put("totalMethods", methods.size());
-            
+
             if (defaultMethod.isPresent()) {
                 response.put("defaultMethodId", defaultMethod.get().getMethodId().toString());
                 response.put("suggestion", "User has a default payment method. You can use it for quick checkout.");
@@ -136,7 +131,8 @@ public class PaymentMcpToolService {
         }
     }
 
-    private Map<String, Object> buildPaymentResponse(PaymentTransaction transaction, Payment payment, PaymentMethod paymentMethod) {
+    private Map<String, Object> buildPaymentResponse(PaymentTransaction transaction, Payment payment,
+            PaymentMethod paymentMethod) {
         Map<String, Object> response = new LinkedHashMap<>();
 
         PaymentStatus status = transaction.getStatus();
@@ -209,7 +205,8 @@ public class PaymentMcpToolService {
         String paymentMethodId = null;
         String customerId = null;
 
-        if (paymentMethod.getToken() != null && paymentMethod.getToken().trim().startsWith(STRIPE_PAYMENT_METHOD_PREFIX)) {
+        if (paymentMethod.getToken() != null
+                && paymentMethod.getToken().trim().startsWith(STRIPE_PAYMENT_METHOD_PREFIX)) {
             paymentMethodId = paymentMethod.getToken().trim();
         }
 
@@ -266,70 +263,53 @@ public class PaymentMcpToolService {
     /**
      * Process payment via Stripe and record the outcome.
      */
-    @McpTool(
-        generateOutputSchema = true,
-        name = "process_payment",
-        description = "Process a Stripe payment using a stored payment method in BookingSmart. " +
-                "Requires bookingId, userId, amount, currency, and paymentMethodId. " +
-                "Automatically creates the Stripe PaymentIntent, confirms it off-session, and records " +
-                "the resulting transaction for the booking. Returns transaction details and next steps."
-    )
+    @McpTool(generateOutputSchema = true, name = "process_payment", description = "Process a Stripe payment using a stored payment method in BookingSmart. "
+            +
+            "Requires bookingId, userId, amount, currency, and paymentMethodId. " +
+            "IMPORTANT: You SHOULD pass the sagaId that was returned from the create_booking tool to maintain saga correlation. "
+            +
+            "If sagaId is not provided, one will be auto-generated, but this breaks the booking-payment correlation. " +
+            "Automatically creates the Stripe PaymentIntent, confirms it off-session, and records " +
+            "the resulting transaction for the booking. Returns transaction details and next steps.")
     public Map<String, Object> processPayment(
-            @McpToolParam(description = "Booking ID to process payment for (UUID format)")
-            String bookingId,
-            
-            @McpToolParam(description = "User ID making the payment (UUID format)")
-            String userId,
-            
-            @McpToolParam(description = "Payment amount (decimal number)")
-            BigDecimal amount,
-            
-            @McpToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')")
-            String currency,
-            
-            @McpToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.")
-            String paymentMethodId,
-            
-            @McpToolParam(description = "Description or reference for the payment")
-            String description,
-            
-            @McpToolParam(description = "Saga ID from booking creation for correlation")
-            String sagaId
-    ) {
-        return executeStripePayment(bookingId, userId, amount, currency, paymentMethodId, description, sagaId, "process_payment");
+            @McpToolParam(description = "Booking ID to process payment for (UUID format)") String bookingId,
+
+            @McpToolParam(description = "User ID making the payment (UUID format)") String userId,
+
+            @McpToolParam(description = "Payment amount (decimal number)") BigDecimal amount,
+
+            @McpToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')") String currency,
+
+            @McpToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.") String paymentMethodId,
+
+            @McpToolParam(description = "Description or reference for the payment") String description,
+
+            @McpToolParam(description = "Saga ID from booking creation for correlation") String sagaId) {
+        return executeStripePayment(bookingId, userId, amount, currency, paymentMethodId, description, sagaId,
+                "process_payment");
     }
 
     /**
-     * Legacy alias retained for backward compatibility. Prefer using process_payment.
+     * Legacy alias retained for backward compatibility. Prefer using
+     * process_payment.
      */
-    @McpTool(
-        generateOutputSchema = true,
-        name = "record_successful_payment",
-        description = "Legacy alias for process_payment. Performs the same Stripe charge and recording flow. Prefer using process_payment."
-    )
+    @McpTool(generateOutputSchema = true, name = "record_successful_payment", description = "Legacy alias for process_payment. Performs the same Stripe charge and recording flow. Prefer using process_payment.")
     public Map<String, Object> recordSuccessfulPayment(
-            @McpToolParam(description = "Booking ID to process payment for (UUID format)")
-            String bookingId,
-            
-            @McpToolParam(description = "User ID making the payment (UUID format)")
-            String userId,
-            
-            @McpToolParam(description = "Payment amount (decimal number)")
-            BigDecimal amount,
-            
-            @McpToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')")
-            String currency,
-            
-            @McpToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.")
-            String paymentMethodId,
-            
-            @McpToolParam(description = "Description or reference for the payment")
-            String description,
-            
-            @McpToolParam(description = "Saga ID from booking creation for correlation")
-            String sagaId
-    ) {
-        return executeStripePayment(bookingId, userId, amount, currency, paymentMethodId, description, sagaId, "record_successful_payment");
+            @McpToolParam(description = "Booking ID to process payment for (UUID format)") String bookingId,
+
+            @McpToolParam(description = "User ID making the payment (UUID format)") String userId,
+
+            @McpToolParam(description = "Payment amount (decimal number)") BigDecimal amount,
+
+            @McpToolParam(description = "Currency code (e.g., 'USD', 'VND', 'EUR')") String currency,
+
+            @McpToolParam(description = "Payment method ID to use (UUID format). Get from get_user_stored_payment_methods tool.") String paymentMethodId,
+
+            @McpToolParam(description = "Description or reference for the payment") String description,
+
+            @McpToolParam(description = "Saga ID from booking creation for correlation") String sagaId) {
+        return executeStripePayment(bookingId, userId, amount, currency, paymentMethodId, description, sagaId,
+                "record_successful_payment");
     }
 
     private Map<String, Object> executeStripePayment(
@@ -340,8 +320,7 @@ public class PaymentMcpToolService {
             String paymentMethodId,
             String description,
             String sagaId,
-            String toolName
-    ) {
+            String toolName) {
         try {
             if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
                 return createErrorResponse("Amount must be greater than zero.");
@@ -357,7 +336,8 @@ public class PaymentMcpToolService {
 
             Optional<PaymentMethod> methodOpt = paymentMethodRepository.findById(methodUuid);
             if (methodOpt.isEmpty()) {
-                return createErrorResponse("Payment method not found. Please use get_user_stored_payment_methods to select a valid payment method.");
+                return createErrorResponse(
+                        "Payment method not found. Please use get_user_stored_payment_methods to select a valid payment method.");
             }
 
             PaymentMethod paymentMethod = methodOpt.get();
@@ -371,12 +351,14 @@ public class PaymentMcpToolService {
             }
 
             if (paymentMethod.getProvider() != PaymentProvider.STRIPE) {
-                return createErrorResponse("Payment method provider is not Stripe. Choose a Stripe-backed payment method.");
+                return createErrorResponse(
+                        "Payment method provider is not Stripe. Choose a Stripe-backed payment method.");
             }
 
             StripeProviderDetails stripeDetails = extractStripeProviderDetails(paymentMethod);
             if (!stripeDetails.hasPaymentMethodId()) {
-                return createErrorResponse("Stored payment method is missing a Stripe payment method ID. Ask the user to re-link their card.");
+                return createErrorResponse(
+                        "Stored payment method is missing a Stripe payment method ID. Ask the user to re-link their card.");
             }
 
             paymentMethod.setToken(stripeDetails.getPaymentMethodId());
@@ -425,20 +407,14 @@ public class PaymentMcpToolService {
     /**
      * Get payment status and history for a booking
      */
-    @McpTool(
-        generateOutputSchema = true,
-        name = "get_booking_payment_status",
-        description = "Get payment status and transaction history for a booking. " +
-                "Returns all payment attempts, transaction statuses, amounts, and payment methods used. " +
-                "Useful for checking if payment was successful or troubleshooting payment issues."
-    )
+    @McpTool(generateOutputSchema = true, name = "get_booking_payment_status", description = "Get payment status and transaction history for a booking. "
+            +
+            "Returns all payment attempts, transaction statuses, amounts, and payment methods used. " +
+            "Useful for checking if payment was successful or troubleshooting payment issues.")
     public Map<String, Object> getBookingPaymentStatus(
-            @McpToolParam(description = "Booking ID to check payment status for (UUID format)")
-            String bookingId,
-            
-            @McpToolParam(description = "User ID who owns the booking (UUID format)")
-            String userId
-    ) {
+            @McpToolParam(description = "Booking ID to check payment status for (UUID format)") String bookingId,
+
+            @McpToolParam(description = "User ID who owns the booking (UUID format)") String userId) {
         try {
             log.info("AI Tool: Getting payment status for bookingId={}", bookingId);
 
@@ -447,17 +423,16 @@ public class PaymentMcpToolService {
 
             // Get payment for booking
             Optional<Payment> paymentOpt = paymentService.getPaymentByBookingId(bookingUuid);
-            
+
             if (paymentOpt.isEmpty()) {
                 return Map.of(
-                    "success", true,
-                    "hasPayment", false,
-                    "message", "No payment found for this booking yet. Payment may still be pending."
-                );
+                        "success", true,
+                        "hasPayment", false,
+                        "message", "No payment found for this booking yet. Payment may still be pending.");
             }
 
             Payment payment = paymentOpt.get();
-            
+
             // Verify payment belongs to user
             if (!payment.getUserId().equals(userUuid)) {
                 return createErrorResponse("Payment does not belong to this user.");
@@ -467,19 +442,19 @@ public class PaymentMcpToolService {
             List<PaymentTransaction> transactions = paymentService.getPaymentTransactions(payment.getPaymentId());
 
             List<Map<String, Object>> transactionList = transactions.stream()
-                .map(txn -> {
-                    Map<String, Object> txnMap = new LinkedHashMap<>();
-                    txnMap.put("transactionId", txn.getTransactionId().toString());
-                    txnMap.put("status", txn.getStatus().toString());
-                    txnMap.put("amount", txn.getAmount());
-                    txnMap.put("currency", txn.getCurrency());
-                    txnMap.put("createdAt", txn.getCreatedAt());
-                    if (txn.getFailureReason() != null) {
-                        txnMap.put("failureReason", txn.getFailureReason());
-                    }
-                    return txnMap;
-                })
-                .collect(Collectors.toList());
+                    .map(txn -> {
+                        Map<String, Object> txnMap = new LinkedHashMap<>();
+                        txnMap.put("transactionId", txn.getTransactionId().toString());
+                        txnMap.put("status", txn.getStatus().toString());
+                        txnMap.put("amount", txn.getAmount());
+                        txnMap.put("currency", txn.getCurrency());
+                        txnMap.put("createdAt", txn.getCreatedAt());
+                        if (txn.getFailureReason() != null) {
+                            txnMap.put("failureReason", txn.getFailureReason());
+                        }
+                        return txnMap;
+                    })
+                    .collect(Collectors.toList());
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("success", true);
@@ -540,8 +515,7 @@ public class PaymentMcpToolService {
 
     private Map<String, Object> createErrorResponse(String message) {
         return Map.of(
-            "success", false,
-            "error", message
-        );
+                "success", false,
+                "error", message);
     }
 }

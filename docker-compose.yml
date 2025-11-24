@@ -570,18 +570,18 @@ services:
               capabilities: [gpu]
     networks:
       - booking-network
-  # redis-insight:
-  #   image: redis/redisinsight:latest
-  #   container_name: redis-insight
-  #   restart: unless-stopped
-  #   ports:
-  #     - "5540:5540"
-  #   volumes:
-  #     - redis-insight-data:/data
-  #   networks:
-  #     - booking-network
-  #   depends_on:
-  #     - redis
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: redis-insight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis-insight-data:/data
+    networks:
+      - booking-network
+    depends_on:
+      - redis
 
 networks:
   booking-network:

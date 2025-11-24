@@ -52,13 +52,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(
             1,
-            new ChatSocketThreadFactory("chat-heartbeat")
-    );
+            new ChatSocketThreadFactory("chat-heartbeat"));
 
     private final ScheduledExecutorService workerPool = Executors.newScheduledThreadPool(
             Runtime.getRuntime().availableProcessors(),
-            new ChatSocketThreadFactory("chat-worker")
-    );
+            new ChatSocketThreadFactory("chat-worker"));
 
     private final Map<String, ScheduledFuture<?>> heartbeatRegistrations = new ConcurrentHashMap<>();
     private final reactor.core.scheduler.Scheduler workerScheduler = Schedulers.fromExecutor(workerPool);
@@ -90,8 +88,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String username = resolveUserId(session).orElse(null);
         if (!StringUtils.hasText(username)) {
             log.warn("⚠️ [AI-WS] Missing authenticated user, sessionId={}", session.getId());
+            // DEBUG: Send detailed error
             safeSend(session, buildErrorResponse(socketRequest.getRequestId(),
-                    "Authentication is required to use the AI assistant.", socketRequest.getConversationId(), null));
+                    "DEBUG: Auth failed. Missing 'username'. Session attributes: " + session.getAttributes().keySet(),
+                    socketRequest.getConversationId(), null));
             session.close(CloseStatus.NOT_ACCEPTABLE.withReason("Authentication required"));
             return;
         }
@@ -100,8 +100,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String userId = resolveUserIdFromJwt(session).orElse(null);
         if (!StringUtils.hasText(userId)) {
             log.warn("⚠️ [AI-WS] Missing userId (JWT sub) from session, sessionId={}", session.getId());
+            // DEBUG: Send detailed error
             safeSend(session, buildErrorResponse(socketRequest.getRequestId(),
-                    "Invalid authentication token.", socketRequest.getConversationId(), username));
+                    "DEBUG: Auth failed. Missing 'userId' (sub). username=" + username,
+                    socketRequest.getConversationId(), username));
             session.close(CloseStatus.NOT_ACCEPTABLE.withReason("Invalid token"));
             return;
         }
@@ -124,7 +126,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .type(ResponseType.PROCESSING)
                 .requestId(requestId)
                 .conversationId(conversationId)
-                .userId(username)  // Display username in response
+                .userId(username) // Display username in response
                 .userMessage(socketRequest.getMessage())
                 .status("Processing")
                 .timestamp(LocalDateTime.now())
@@ -152,17 +154,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 safeSend(session, keepAliveMsg);
                 log.debug("🔄 [AI-WS] Sent keep-alive for requestId={}", requestId);
             }
-        }, 15, 15, TimeUnit.SECONDS);  // Send every 15 seconds
+        }, 15, 15, TimeUnit.SECONDS); // Send every 15 seconds
 
-        // Pass both username (for conversationKey) and userId (UUID for MCP tools) to LLMAiService
-        reactor.core.publisher.Mono.fromCallable(() ->
-                        llmAiService.processStructured(
-                                chatRequest.getMessage(),
-                                chatRequest.getConversationId(),
-                                username,  // Username for conversationKey format (username:convId)
-                                userId     // Real userId (UUID from JWT sub) for MCP tools
-                        )
-                )
+        // Pass both username (for conversationKey) and userId (UUID for MCP tools) to
+        // LLMAiService
+        reactor.core.publisher.Mono.fromCallable(() -> llmAiService.processStructured(
+                chatRequest.getMessage(),
+                chatRequest.getConversationId(),
+                username, // Username for conversationKey format (username:convId)
+                userId // Real userId (UUID from JWT sub) for MCP tools
+        ))
                 .subscribeOn(workerScheduler)
                 .doFinally(signalType -> {
                     // Cancel keep-alive when processing completes
@@ -183,7 +184,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                                     .type(ResponseType.RESPONSE)
                                     .requestId(requestId)
                                     .conversationId(conversationId)
-                                    .userId(username)  // Display username
+                                    .userId(username) // Display username
                                     .userMessage(socketRequest.getMessage())
                                     .aiResponse(safePayload.getMessage())
                                     .results(safePayload.getResults())
@@ -198,14 +199,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                             safeSend(session, response);
                         },
                         throwable -> {
-                            log.error("❌ [AI-WS] Error processing message. requestId={}, conversationId={}, userId={}, username={}",
+                            log.error(
+                                    "❌ [AI-WS] Error processing message. requestId={}, conversationId={}, userId={}, username={}",
                                     requestId, conversationId, userId, username, throwable);
                             safeSend(session, buildErrorResponse(requestId,
                                     "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
                                     conversationId,
                                     username));
-                        }
-                );
+                        });
     }
 
     private ChatSocketRequest parseRequest(String payload) {
@@ -219,32 +220,32 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private void safeSend(WebSocketSession session, ChatMessageResponse response) {
         if (session == null || !session.isOpen()) {
-            log.warn("⚠️ [AI-WS] Cannot send message - session is null or closed. sessionId={}", 
+            log.warn("⚠️ [AI-WS] Cannot send message - session is null or closed. sessionId={}",
                     session != null ? session.getId() : "null");
             return;
         }
         try {
             String json = objectMapper.writeValueAsString(response);
             synchronized (session) {
-                if (session.isOpen()) {  // Double-check before sending
+                if (session.isOpen()) { // Double-check before sending
                     session.sendMessage(new TextMessage(json));
-                    log.debug("✅ [AI-WS] Message sent successfully. sessionId={}, type={}", 
+                    log.debug("✅ [AI-WS] Message sent successfully. sessionId={}, type={}",
                             session.getId(), response.getType());
                 } else {
-                    log.warn("⚠️ [AI-WS] Session closed while preparing to send. sessionId={}", 
+                    log.warn("⚠️ [AI-WS] Session closed while preparing to send. sessionId={}",
                             session.getId());
                 }
             }
         } catch (IOException e) {
-            log.warn("⚠️ [AI-WS] Failed to send message to sessionId={}: {}", 
+            log.warn("⚠️ [AI-WS] Failed to send message to sessionId={}: {}",
                     session != null ? session.getId() : "null", e.getMessage());
         }
     }
 
     private ChatMessageResponse buildErrorResponse(String requestId,
-                                                   String message,
-                                                   String conversationId,
-                                                   String userId) {
+            String message,
+            String conversationId,
+            String userId) {
         return ChatMessageResponse.builder()
                 .type(ResponseType.ERROR)
                 .requestId(requestId)
@@ -364,8 +365,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 },
                 INITIAL_HEARTBEAT_DELAY.toSeconds(),
                 HEARTBEAT_INTERVAL.toSeconds(),
-                TimeUnit.SECONDS
-        );
+                TimeUnit.SECONDS);
         heartbeatRegistrations.put(session.getId(), future);
     }
 

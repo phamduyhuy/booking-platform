@@ -90,7 +90,15 @@ public class ExploreAgent {
             - Suggest both domestic and international destinations relevant to their location
             - Mix different categories (beach, city, nature) for diverse recommendations
             
-            Remember: NEVER return plain text. ALWAYS return structured JSON with complete tool-sourced data!
+            ## CRITICAL: RESPONSE FORMAT
+            - You MUST respond with ONLY valid JSON matching the schema provided at the end
+            - DO NOT add any text before or after the JSON
+            - DO NOT wrap the JSON in markdown code blocks (no ```)
+            - DO NOT add explanatory text outside the JSON structure
+            - All user-facing messages MUST go INSIDE the message field of the JSON
+            - Example CORRECT: Start directly with the opening brace, put all text in message field
+            - Example WRONG: Adding text before JSON, wrapping in code blocks, or adding explanations
+            - The ENTIRE response must be parseable as JSON - nothing else!
             """;
 
         private final GoogleGenAiChatModel googleGenAiChatModel;

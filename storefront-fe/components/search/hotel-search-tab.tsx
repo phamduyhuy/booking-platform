@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
 import { hotelService } from "@/modules/hotel/service"
-import type { InitialHotelData, HotelDetails } from "@/modules/hotel/type"
+import type { InitialHotelData, HotelDetails, HotelSearchResult as ApiHotelSearchResult } from "@/modules/hotel/type"
 import HotelDetailsModal from "@/modules/hotel/component/HotelDetailsModal"
 import { HotelDestinationModal } from "@/modules/hotel/component/HotelDestinationModal"
 import { formatPrice } from "@/lib/currency"
@@ -157,7 +157,7 @@ export function HotelSearchTab({ onBookingStart }: HotelSearchTabProps = {}) {
     const roomId = room.roomId || room.id || roomTypeId
     const roomName = room.name || room.roomType || 'Selected Room'
     const roomType = room.roomType || room.name || 'Room'
-    const price = Number(room.price ?? room.pricePerNight ?? hotel.pricePerNight) || 0
+    const price = Number(room.price ?? hotel.pricePerNight) || 0
     const [guestCountRaw, roomCountRaw] = guests.split('-')
     const guestCount = parseInt(guestCountRaw || '0', 10) || undefined
     const roomCount = parseInt(roomCountRaw || '0', 10) || undefined
@@ -248,7 +248,7 @@ export function HotelSearchTab({ onBookingStart }: HotelSearchTabProps = {}) {
       })
       setInitialData(res as InitialHotelData)
       
-      const ui = (res.hotels || []).map((h: HotelDetails) => ({
+      const ui = (res.hotels || []).map((h: ApiHotelSearchResult) => ({
         id: h.hotelId,
         name: h.name,
         image: h.primaryImage || h.images?.[0] || "/placeholder.svg",
@@ -314,7 +314,7 @@ export function HotelSearchTab({ onBookingStart }: HotelSearchTabProps = {}) {
         page: usePage,
         limit,
       })
-      const ui = (res.hotels || []).map((h: HotelDetails) => ({
+      const ui = (res.hotels || []).map((h: ApiHotelSearchResult) => ({
         id: h.hotelId,
         name: h.name,
         image: h.primaryImage || h.images?.[0] || "/placeholder.svg",
@@ -398,7 +398,7 @@ export function HotelSearchTab({ onBookingStart }: HotelSearchTabProps = {}) {
     <div className="flex flex-col h-full bg-gray-50">
       {/* Search Form */}
       <div className="bg-white border-b shadow-sm" ref={searchSectionRef}>
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full">
           {/* Chevron Toggle Button - Always visible */}
           <div className="flex justify-center pt-2">
             <Button
@@ -507,7 +507,7 @@ export function HotelSearchTab({ onBookingStart }: HotelSearchTabProps = {}) {
 
       {/* Results Section */}
       <div className="flex-1 overflow-auto" ref={resultsContainerRef}>
-        <div className="max-w-6xl mx-auto p-6">
+        <div className="w-full p-6">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Filters Sidebar - Sticky */}
             <div className="lg:col-span-1">
@@ -718,7 +718,10 @@ export function HotelSearchTab({ onBookingStart }: HotelSearchTabProps = {}) {
       <HotelDestinationModal
         isOpen={isDestinationModalOpen}
         onClose={() => setIsDestinationModalOpen(false)}
-        onSelect={handleDestinationSelect}
+        onSelect={(destination: any) => {
+          setDestination(destination.name)
+          setIsDestinationModalOpen(false)
+        }}
         title="Chọn điểm đến"
         placeholder="Tìm kiếm thành phố hoặc khách sạn..."
       />

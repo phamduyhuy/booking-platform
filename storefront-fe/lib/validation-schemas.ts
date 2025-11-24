@@ -39,6 +39,7 @@ export const UserInfoSchema = z.object({
   address: UserAddressSchema.optional(),
   phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Must be a valid phone number with country code').optional(),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be in YYYY-MM-DD format').optional(),
+  gender: z.enum(['male', 'female', 'other']).optional(),
 });
 
 // Attribute Update Request Schema

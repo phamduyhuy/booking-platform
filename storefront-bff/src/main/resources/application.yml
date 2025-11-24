@@ -90,13 +90,6 @@ spring:
           filters:
             - StripPrefix=1
             - TokenRelay=
-        - id: ai-agent-service
-          uri: lb://AIAGENT-SERVICE
-          predicates:
-            - Path=/api/ai/**
-          filters:
-            - RewritePath=/api/ai/(?<segment>.*), /ai/${segment}
-            - TokenRelay=
         - id: aiagent-ws
           uri: lb:ws://AIAGENT-SERVICE
           predicates:
@@ -104,6 +97,13 @@ spring:
           filters:
             - RewritePath=/api/ai/ws/(?<segment>.*), /ws/${segment}
             - WebSocketTokenRelay
+        - id: ai-agent-service
+          uri: lb://AIAGENT-SERVICE
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - RewritePath=/api/ai/(?<segment>.*), /ai/${segment}
+            - TokenRelay=
         # Administrative routes
         - id: eureka-web-start
           uri: lb://DISCOVERY-SERVICE
@@ -154,6 +154,13 @@ spring:
       server:
         webflux:
           routes:
+            - id: aiagent-ws
+              uri: lb:ws://AIAGENT-SERVICE
+              predicates:
+                - Path=/api/ai/ws/**
+              filters:
+                - RewritePath=/api/ai/ws/(?<segment>.*), /ai/ws/${segment}
+                - WebSocketTokenRelay
             - id: api
               uri: ${API_URL}
               predicates:
@@ -166,13 +173,6 @@ spring:
               uri: http://storefront-fe:3000
               predicates:
                 - Path=/**
-            - id: aiagent-ws
-              uri: lb:ws://AIAGENT-SERVICE
-              predicates:
-                - Path=/api/ai/ws/**
-              filters:
-                - RewritePath=/api/ai/ws/(?<segment>.*), /ws/${segment}
-                - WebSocketTokenRelay
           default-filters:
             - SaveSession
 

@@ -87,6 +87,7 @@ interface UserProfileInfo {
   email: string
   phone: string
   dateOfBirth: string
+  gender: string
 }
 
 export function ProfileInfo({ user, onUpdate }: ProfileInfoProps) {
@@ -101,6 +102,7 @@ export function ProfileInfo({ user, onUpdate }: ProfileInfoProps) {
     email: user.email || "",
     phone: user.phone || "",
     dateOfBirth: user.dateOfBirth || "",
+    gender: user.gender || "",
   })
 
   const initialPhone = parsePhoneNumber(user.phone || "")
@@ -125,6 +127,7 @@ export function ProfileInfo({ user, onUpdate }: ProfileInfoProps) {
       const basicAttributes: Record<string, string> = {
         'phone': formattedPhone,
         'dateOfBirth': userInfo.dateOfBirth,
+        'gender': userInfo.gender,
       }
 
       const filteredAttributes = Object.fromEntries(
@@ -358,6 +361,23 @@ export function ProfileInfo({ user, onUpdate }: ProfileInfoProps) {
               disabled={!isEditing}
               className="bg-white border-gray-300 disabled:opacity-60"
             />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gender">Giới tính</Label>
+            <Select
+              value={userInfo.gender}
+              onValueChange={(value) => setUserInfo((prev) => ({ ...prev, gender: value }))}
+              disabled={!isEditing}
+            >
+              <SelectTrigger className="w-full bg-white border-gray-300 disabled:opacity-60">
+                <SelectValue placeholder="Chọn giới tính" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Nam</SelectItem>
+                <SelectItem value="female">Nữ</SelectItem>
+                <SelectItem value="other">Khác</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </CardContent>

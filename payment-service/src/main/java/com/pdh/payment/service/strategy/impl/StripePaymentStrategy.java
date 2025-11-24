@@ -36,48 +36,48 @@ import java.util.Set;
 @RequiredArgsConstructor
 @Slf4j
 public class StripePaymentStrategy implements PaymentStrategy {
-    
+
     private final StripeConfig stripeConfig;
-    
+
     private static final String STRATEGY_NAME = "Stripe Payment Strategy";
     private static final BigDecimal STRIPE_FEE_RATE = new BigDecimal("0.029"); // 2.9%
     private static final BigDecimal STRIPE_FIXED_FEE = new BigDecimal("0.30"); // $0.30
     private static final Set<String> ZERO_DECIMAL_CURRENCIES = Set.of(
-        "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg",
-        "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf"
-    );
-    
+            "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg",
+            "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf");
+
     @jakarta.annotation.PostConstruct
     public void initializeStripe() {
         if (stripeConfig.isValid()) {
             Stripe.apiKey = stripeConfig.getApi().getSecretKey();
-            log.info("Stripe API initialized with key: {}***", 
+            log.info("Stripe API initialized with key: {}***",
                     stripeConfig.getApi().getSecretKey().substring(0, 8));
         } else {
             log.warn("Stripe configuration is invalid, strategy will not be available");
         }
     }
-    
+
     @Override
-    public PaymentTransaction processPayment(Payment payment, PaymentMethod paymentMethod, Map<String, Object> additionalData) {
-        log.info("Processing Stripe payment for payment ID: {} with method: {}", 
+    public PaymentTransaction processPayment(Payment payment, PaymentMethod paymentMethod,
+            Map<String, Object> additionalData) {
+        log.info("Processing Stripe payment for payment ID: {} with method: {}",
                 payment.getPaymentId(), paymentMethod.getMethodType());
-        
+
         PaymentTransaction transaction = createBaseTransaction(payment, paymentMethod);
-        
+
         try {
             PaymentIntent paymentIntent;
-            
+
             // Check if this is an off-session payment with stored payment method
-            boolean isOffSession = additionalData != null && 
-                                   Boolean.TRUE.equals(additionalData.get("offSession"));
+            boolean isOffSession = additionalData != null &&
+                    Boolean.TRUE.equals(additionalData.get("offSession"));
 
             String storedPaymentMethodId = resolvePaymentMethodId(paymentMethod, additionalData);
             boolean hasStoredPaymentMethod = storedPaymentMethodId != null && !storedPaymentMethodId.isEmpty();
 
             if (isOffSession || hasStoredPaymentMethod) {
                 // Server-side off-session payment with stored payment method
-                log.info("Processing off-session payment with stored payment method for payment: {}", 
+                log.info("Processing off-session payment with stored payment method for payment: {}",
                         payment.getPaymentId());
                 paymentIntent = createAndConfirmPaymentIntent(payment, paymentMethod, additionalData);
             } else {
@@ -85,13 +85,13 @@ public class StripePaymentStrategy implements PaymentStrategy {
                 log.info("Processing traditional payment intent for payment: {}", payment.getPaymentId());
                 paymentIntent = createPaymentIntentWithRetry(payment, paymentMethod, additionalData);
             }
-            
+
             // Update transaction with Stripe data
             updateTransactionWithStripeData(transaction, paymentIntent);
-            
-            log.info("Stripe payment intent created successfully: {} with status: {}", 
+
+            log.info("Stripe payment intent created successfully: {} with status: {}",
                     paymentIntent.getId(), paymentIntent.getStatus());
-            
+
         } catch (StripeException e) {
             log.error("Stripe payment failed for payment ID: {} - {}", payment.getPaymentId(), e.getMessage());
             handleStripeError(transaction, e);
@@ -99,140 +99,141 @@ public class StripePaymentStrategy implements PaymentStrategy {
             log.error("Unexpected error during Stripe payment processing", e);
             transaction.markAsFailed("Unexpected error: " + e.getMessage(), "INTERNAL_ERROR");
         }
-        
+
         return transaction;
     }
-    
+
     @Override
-    public PaymentTransaction processRefund(PaymentTransaction originalTransaction, BigDecimal refundAmount, String reason) {
-        log.info("Processing Stripe refund for transaction: {} with amount: {}", 
+    public PaymentTransaction processRefund(PaymentTransaction originalTransaction, BigDecimal refundAmount,
+            String reason) {
+        log.info("Processing Stripe refund for transaction: {} with amount: {}",
                 originalTransaction.getTransactionId(), refundAmount);
-        
+
         PaymentTransaction refundTransaction = createRefundTransaction(originalTransaction, refundAmount, reason);
-        
+
         try {
             // Create Stripe Refund with simple retry
             Refund refund = createStripeRefundWithRetry(originalTransaction, refundAmount, reason);
-            
+
             // Update transaction with refund data
             updateRefundTransactionWithStripeData(refundTransaction, refund);
-            
+
             log.info("Stripe refund created successfully: {}", refund.getId());
-            
+
         } catch (StripeException e) {
-            log.error("Stripe refund failed for transaction: {} - {}", originalTransaction.getTransactionId(), e.getMessage());
+            log.error("Stripe refund failed for transaction: {} - {}", originalTransaction.getTransactionId(),
+                    e.getMessage());
             handleStripeRefundError(refundTransaction, e);
         } catch (Exception e) {
             log.error("Unexpected error during Stripe refund processing", e);
             refundTransaction.markAsFailed("Unexpected error: " + e.getMessage(), "INTERNAL_ERROR");
         }
-        
+
         return refundTransaction;
     }
-    
+
     @Override
     public PaymentTransaction verifyPaymentStatus(PaymentTransaction transaction) {
         log.debug("Verifying Stripe payment status for transaction: {}", transaction.getTransactionId());
-        
+
         if (transaction.getGatewayTransactionId() == null) {
             log.warn("No Stripe payment intent ID found for transaction: {}", transaction.getTransactionId());
             return transaction;
         }
-        
+
         try {
             PaymentIntent paymentIntent = PaymentIntent.retrieve(
-                transaction.getGatewayTransactionId(),
-                PaymentIntentRetrieveParams.builder().build(),
-                null
-            );
-            
+                    transaction.getGatewayTransactionId(),
+                    PaymentIntentRetrieveParams.builder().build(),
+                    null);
+
             updateTransactionStatusFromStripe(transaction, paymentIntent);
-            
+
         } catch (StripeException e) {
-            log.error("Failed to verify Stripe payment status for transaction: {}", 
+            log.error("Failed to verify Stripe payment status for transaction: {}",
                     transaction.getTransactionId(), e);
         }
-        
+
         return transaction;
     }
-    
+
     @Override
     public PaymentTransaction cancelPayment(PaymentTransaction transaction, String reason) {
-        log.info("Cancelling Stripe payment for transaction: {} with reason: {}", 
+        log.info("Cancelling Stripe payment for transaction: {} with reason: {}",
                 transaction.getTransactionId(), reason);
-        
+
         try {
             if (transaction.getGatewayTransactionId() != null) {
                 PaymentIntent paymentIntent = PaymentIntent.retrieve(transaction.getGatewayTransactionId());
-                
-                if ("requires_payment_method".equals(paymentIntent.getStatus()) || 
-                    "requires_confirmation".equals(paymentIntent.getStatus())) {
+
+                if ("requires_payment_method".equals(paymentIntent.getStatus()) ||
+                        "requires_confirmation".equals(paymentIntent.getStatus())) {
                     // Cancel the payment intent
                     paymentIntent.cancel();
                     log.info("Stripe payment intent cancelled: {}", paymentIntent.getId());
                 }
             }
-            
+
             transaction.setStatus(PaymentStatus.CANCELLED);
             transaction.setGatewayStatus("CANCELLED");
             transaction.setFailureReason(reason);
             transaction.setFailureCode("USER_CANCELLED");
             transaction.setProcessedAt(ZonedDateTime.now());
-            
+
         } catch (StripeException e) {
             log.error("Failed to cancel Stripe payment intent", e);
             // Still mark as cancelled locally even if Stripe call fails
             transaction.setStatus(PaymentStatus.CANCELLED);
             transaction.setFailureReason(reason + " (Stripe cancellation failed: " + e.getMessage() + ")");
         }
-        
+
         return transaction;
     }
-    
+
     @Override
     public boolean supports(PaymentMethod paymentMethod) {
         return paymentMethod.getProvider() == PaymentProvider.STRIPE && stripeConfig.isValid();
     }
-    
+
     @Override
     public String getStrategyName() {
         return STRATEGY_NAME;
     }
-    
+
     @Override
     public ValidationResult validatePaymentMethod(PaymentMethod paymentMethod) {
         if (!supports(paymentMethod)) {
             return ValidationResult.failure("Payment method not supported by Stripe strategy", "UNSUPPORTED_METHOD");
         }
-        
+
         if (!paymentMethod.getIsActive()) {
             return ValidationResult.failure("Payment method is not active", "INACTIVE_METHOD");
         }
-        
+
         if (paymentMethod.getToken() == null || paymentMethod.getToken().trim().isEmpty()) {
             return ValidationResult.failure("Stripe payment method token is required", "MISSING_TOKEN");
         }
-        
+
         return ValidationResult.success();
     }
-    
+
     @Override
     public BigDecimal getProcessingFee(BigDecimal amount, PaymentMethod paymentMethod) {
         // Stripe fee: 2.9% + $0.30
         BigDecimal percentageFee = amount.multiply(STRIPE_FEE_RATE);
         return percentageFee.add(STRIPE_FIXED_FEE);
     }
-    
+
     @Override
     public boolean supportsRefunds() {
         return true;
     }
-    
+
     @Override
     public boolean supportsPartialRefunds() {
         return true;
     }
-    
+
     @Override
     public int getMaxRefundWindowDays() {
         return 120; // Stripe allows refunds up to 120 days
@@ -244,7 +245,7 @@ public class StripePaymentStrategy implements PaymentStrategy {
         PaymentTransaction transaction = new PaymentTransaction();
         transaction.setPayment(payment);
         transaction.setTransactionReference(
-            PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
+                PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
         transaction.setTransactionType(PaymentTransactionType.PAYMENT);
         transaction.setStatus(PaymentStatus.PROCESSING);
         transaction.setAmount(payment.getAmount());
@@ -262,7 +263,7 @@ public class StripePaymentStrategy implements PaymentStrategy {
     }
 
     private PaymentIntent createPaymentIntent(Payment payment, PaymentMethod paymentMethod,
-                                            Map<String, Object> additionalData) throws StripeException {
+            Map<String, Object> additionalData) throws StripeException {
 
         String currency = payment.getCurrency() != null
                 ? payment.getCurrency().toLowerCase()
@@ -275,10 +276,10 @@ public class StripePaymentStrategy implements PaymentStrategy {
                 .setCurrency(currency)
                 .setPaymentMethod(paymentMethod.getToken())
                 .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.valueOf(
-                    stripeConfig.getSettings().getCaptureMethod().toUpperCase()))
+                        stripeConfig.getSettings().getCaptureMethod().toUpperCase()))
                 .setConfirmationMethod(PaymentIntentCreateParams.ConfirmationMethod.valueOf(
-                    stripeConfig.getSettings().getConfirmationMethod().toUpperCase()))
-                .setStatementDescriptor(stripeConfig.getSettings().getStatementDescriptor());
+                        stripeConfig.getSettings().getConfirmationMethod().toUpperCase()))
+                .setStatementDescriptorSuffix(stripeConfig.getSettings().getStatementDescriptor());
 
         // Add metadata
         Map<String, String> metadata = new HashMap<>();
@@ -299,11 +300,13 @@ public class StripePaymentStrategy implements PaymentStrategy {
     }
 
     /**
-     * Create and confirm a PaymentIntent for server-side processing with stored payment method
-     * This is used for MCP/API-initiated payments where the user is not present (off_session)
+     * Create and confirm a PaymentIntent for server-side processing with stored
+     * payment method
+     * This is used for MCP/API-initiated payments where the user is not present
+     * (off_session)
      */
     public PaymentIntent createAndConfirmPaymentIntent(Payment payment, PaymentMethod paymentMethod,
-                                                       Map<String, Object> additionalData) throws StripeException {
+            Map<String, Object> additionalData) throws StripeException {
         String currency = payment.getCurrency() != null
                 ? payment.getCurrency().toLowerCase()
                 : stripeConfig.getSettings().getCurrency();
@@ -324,7 +327,7 @@ public class StripePaymentStrategy implements PaymentStrategy {
                 .setConfirm(true) // Auto-confirm the payment
                 .setOffSession(true) // Indicate this is an off-session payment (no user present)
                 .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.AUTOMATIC) // Capture immediately
-                .setStatementDescriptor(stripeConfig.getSettings().getStatementDescriptor())
+                .setStatementDescriptorSuffix(stripeConfig.getSettings().getStatementDescriptor())
                 .setConfirmationMethod(PaymentIntentCreateParams.ConfirmationMethod.AUTOMATIC);
 
         // Add metadata
@@ -350,32 +353,33 @@ public class StripePaymentStrategy implements PaymentStrategy {
             paramsBuilder.setCustomer(customerId);
         }
 
-        log.info("Creating off-session payment intent for payment {} with stored payment method {}", 
+        log.info("Creating off-session payment intent for payment {} with stored payment method {}",
                 payment.getPaymentId(), paymentMethod.getMethodId());
 
         try {
             // Create and confirm the payment intent
             PaymentIntent paymentIntent = PaymentIntent.create(paramsBuilder.build());
-            
-            log.info("Off-session payment intent created and confirmed: {} with status: {}", 
+
+            log.info("Off-session payment intent created and confirmed: {} with status: {}",
                     paymentIntent.getId(), paymentIntent.getStatus());
-            
+
             return paymentIntent;
-            
+
         } catch (StripeException e) {
             // Handle specific off-session payment errors
             if ("authentication_required".equals(e.getCode())) {
-                log.error("3D Secure authentication required for off-session payment. Payment method may need re-authentication.");
+                log.error(
+                        "3D Secure authentication required for off-session payment. Payment method may need re-authentication.");
                 throw new IllegalStateException(
-                    "Payment requires authentication. User needs to re-authenticate their payment method.", e
-                );
+                        "Payment requires authentication. User needs to re-authenticate their payment method.", e);
             }
             throw e;
         }
     }
 
     /**
-     * Resolve the Stripe customer ID using additional tool data or stored provider metadata.
+     * Resolve the Stripe customer ID using additional tool data or stored provider
+     * metadata.
      */
     private String resolveCustomerId(PaymentMethod paymentMethod, Map<String, Object> additionalData) {
         if (additionalData != null) {
@@ -391,7 +395,8 @@ public class StripePaymentStrategy implements PaymentStrategy {
     }
 
     /**
-     * Resolve the Stripe payment method ID using tool overrides, tokens, or provider metadata.
+     * Resolve the Stripe payment method ID using tool overrides, tokens, or
+     * provider metadata.
      */
     private String resolvePaymentMethodId(PaymentMethod paymentMethod, Map<String, Object> additionalData) {
         if (additionalData != null) {
@@ -487,10 +492,11 @@ public class StripePaymentStrategy implements PaymentStrategy {
     }
 
     /**
-     * Create a Stripe PaymentIntent without attaching a payment method (manual confirmation flow)
+     * Create a Stripe PaymentIntent without attaching a payment method (manual
+     * confirmation flow)
      */
     public PaymentIntent createManualPaymentIntent(Payment payment, Map<String, Object> additionalData,
-                                                   com.pdh.payment.dto.StripePaymentIntentRequest request) throws StripeException {
+            com.pdh.payment.dto.StripePaymentIntentRequest request) throws StripeException {
         String currency = payment.getCurrency() != null
                 ? payment.getCurrency().toLowerCase()
                 : stripeConfig.getSettings().getCurrency();
@@ -498,16 +504,16 @@ public class StripePaymentStrategy implements PaymentStrategy {
         long amountInMinorUnits = toStripeAmount(payment.getAmount(), currency);
 
         PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
-            .setAmount(amountInMinorUnits)
-            .setCurrency(currency)
-            .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.valueOf(
-                stripeConfig.getSettings().getCaptureMethod().toUpperCase()))
-            .setDescription(payment.getDescription());
+                .setAmount(amountInMinorUnits)
+                .setCurrency(currency)
+                .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.valueOf(
+                        stripeConfig.getSettings().getCaptureMethod().toUpperCase()))
+                .setDescription(payment.getDescription());
 
         String confirmationMethod = stripeConfig.getSettings().getConfirmationMethod();
         if (confirmationMethod != null && !"automatic".equalsIgnoreCase(confirmationMethod)) {
             paramsBuilder.setConfirmationMethod(PaymentIntentCreateParams.ConfirmationMethod.valueOf(
-                confirmationMethod.toUpperCase()));
+                    confirmationMethod.toUpperCase()));
         }
 
         // Align payment method types with Stripe Elements usage
@@ -534,7 +540,8 @@ public class StripePaymentStrategy implements PaymentStrategy {
         }
         paramsBuilder.putAllMetadata(metadata);
 
-        // Handle customer information - ensure we have a customer ID if possible to prevent payment method reuse issues
+        // Handle customer information - ensure we have a customer ID if possible to
+        // prevent payment method reuse issues
         String customerId = request.getCustomerId();
         if (customerId == null || customerId.isBlank()) {
             // If no customer ID is provided, try to get from additional data or create one
@@ -545,14 +552,15 @@ public class StripePaymentStrategy implements PaymentStrategy {
 
             if (customerEmail != null) {
                 customerId = getOrCreateCustomer(customerEmail,
-                    request.getCustomerName() != null ? request.getCustomerName() :
-                    additionalData != null ? (String) additionalData.get("customer_name") : null);
+                        request.getCustomerName() != null ? request.getCustomerName()
+                                : additionalData != null ? (String) additionalData.get("customer_name") : null);
             }
         }
 
         // Always attach customer and set setup_future_usage if a customer is available.
         // This ensures consistency with the frontend Elements provider.
-        // The decision to actually save the payment method in our DB is handled separately after payment success.
+        // The decision to actually save the payment method in our DB is handled
+        // separately after payment success.
         if (customerId != null && !customerId.isBlank()) {
             paramsBuilder.setCustomer(customerId);
             paramsBuilder.setSetupFutureUsage(PaymentIntentCreateParams.SetupFutureUsage.ON_SESSION);
@@ -574,13 +582,13 @@ public class StripePaymentStrategy implements PaymentStrategy {
      * Update an existing Stripe PaymentIntent without confirming
      */
     public PaymentIntent updateManualPaymentIntent(PaymentIntent existingIntent, Payment payment,
-                                                   Map<String, Object> additionalData,
-                                                   com.pdh.payment.dto.StripePaymentIntentRequest request) throws StripeException {
+            Map<String, Object> additionalData,
+            com.pdh.payment.dto.StripePaymentIntentRequest request) throws StripeException {
         long amountInMinorUnits = toStripeAmount(payment.getAmount(), existingIntent.getCurrency());
 
         PaymentIntentUpdateParams.Builder paramsBuilder = PaymentIntentUpdateParams.builder()
-            .setAmount(amountInMinorUnits)
-            .setDescription(payment.getDescription());
+                .setAmount(amountInMinorUnits)
+                .setDescription(payment.getDescription());
 
         if (request.getMetadata() != null) {
             request.getMetadata().forEach((key, value) -> {
@@ -590,7 +598,8 @@ public class StripePaymentStrategy implements PaymentStrategy {
             });
         }
 
-        paramsBuilder.putMetadata("save_payment_method", String.valueOf(Boolean.TRUE.equals(request.getSavePaymentMethod())));
+        paramsBuilder.putMetadata("save_payment_method",
+                String.valueOf(Boolean.TRUE.equals(request.getSavePaymentMethod())));
         paramsBuilder.putMetadata("set_as_default", String.valueOf(Boolean.TRUE.equals(request.getSetAsDefault())));
         if (request.getPaymentMethodType() != null) {
             paramsBuilder.putMetadata("requested_payment_method_type", request.getPaymentMethodType().name());
@@ -646,11 +655,11 @@ public class StripePaymentStrategy implements PaymentStrategy {
     }
 
     private PaymentTransaction createRefundTransaction(PaymentTransaction originalTransaction,
-                                                     BigDecimal refundAmount, String reason) {
+            BigDecimal refundAmount, String reason) {
         PaymentTransaction refundTransaction = new PaymentTransaction();
         refundTransaction.setPayment(originalTransaction.getPayment());
         refundTransaction.setTransactionReference(
-            PaymentTransaction.generateTransactionReference(PaymentTransactionType.REFUND));
+                PaymentTransaction.generateTransactionReference(PaymentTransactionType.REFUND));
         refundTransaction.setTransactionType(PaymentTransactionType.REFUND);
         refundTransaction.setStatus(PaymentStatus.PROCESSING);
         refundTransaction.setAmount(refundAmount);
@@ -666,7 +675,7 @@ public class StripePaymentStrategy implements PaymentStrategy {
     }
 
     private Refund createStripeRefund(PaymentTransaction originalTransaction,
-                                    BigDecimal refundAmount, String reason) throws StripeException {
+            BigDecimal refundAmount, String reason) throws StripeException {
 
         long amountInMinorUnits = toStripeAmount(refundAmount, originalTransaction.getCurrency());
 
@@ -699,15 +708,14 @@ public class StripePaymentStrategy implements PaymentStrategy {
         }
     }
 
-
     /**
      * Create PaymentIntent with simple retry logic (MVP approach)
      */
-    private PaymentIntent createPaymentIntentWithRetry(Payment payment, PaymentMethod paymentMethod, 
-                                                     Map<String, Object> additionalData) throws StripeException {
+    private PaymentIntent createPaymentIntentWithRetry(Payment payment, PaymentMethod paymentMethod,
+            Map<String, Object> additionalData) throws StripeException {
         int maxRetries = 2;
         int attempt = 0;
-        
+
         while (attempt < maxRetries) {
             attempt++;
             try {
@@ -731,11 +739,11 @@ public class StripePaymentStrategy implements PaymentStrategy {
     /**
      * Create Stripe Refund with simple retry logic (MVP approach)
      */
-    private Refund createStripeRefundWithRetry(PaymentTransaction originalTransaction, 
-                                             BigDecimal refundAmount, String reason) throws StripeException {
+    private Refund createStripeRefundWithRetry(PaymentTransaction originalTransaction,
+            BigDecimal refundAmount, String reason) throws StripeException {
         int maxRetries = 2;
         int attempt = 0;
-        
+
         while (attempt < maxRetries) {
             attempt++;
             try {
@@ -761,8 +769,8 @@ public class StripePaymentStrategy implements PaymentStrategy {
      */
     private boolean isRetryableError(StripeException e) {
         return e.getStatusCode() >= 500 || // Server errors
-               e.getClass().getSimpleName().equals("RateLimitException") ||
-               e.getClass().getSimpleName().equals("ApiConnectionException");
+                e.getClass().getSimpleName().equals("RateLimitException") ||
+                e.getClass().getSimpleName().equals("ApiConnectionException");
     }
 
     private long toStripeAmount(BigDecimal amount, String currency) {
@@ -771,12 +779,12 @@ public class StripePaymentStrategy implements PaymentStrategy {
         }
 
         String effectiveCurrency = currency != null
-            ? currency.toLowerCase()
-            : stripeConfig.getSettings().getCurrency().toLowerCase();
+                ? currency.toLowerCase()
+                : stripeConfig.getSettings().getCurrency().toLowerCase();
 
         BigDecimal normalizedAmount = ZERO_DECIMAL_CURRENCIES.contains(effectiveCurrency)
-            ? amount.setScale(0, RoundingMode.HALF_UP)
-            : amount.multiply(new BigDecimal("100")).setScale(0, RoundingMode.HALF_UP);
+                ? amount.setScale(0, RoundingMode.HALF_UP)
+                : amount.multiply(new BigDecimal("100")).setScale(0, RoundingMode.HALF_UP);
 
         return normalizedAmount.longValueExact();
     }
@@ -807,30 +815,30 @@ public class StripePaymentStrategy implements PaymentStrategy {
         try {
             // Try to find customer by email first
             com.stripe.model.Customer retrievedCustomer = com.stripe.model.Customer.list(
-                com.stripe.param.CustomerListParams.builder()
-                    .setEmail(email)
-                    .setLimit(1L)
-                    .build()
-            ).getData().stream().findFirst().orElse(null);
-            
+                    com.stripe.param.CustomerListParams.builder()
+                            .setEmail(email)
+                            .setLimit(1L)
+                            .build())
+                    .getData().stream().findFirst().orElse(null);
+
             if (retrievedCustomer != null) {
                 return retrievedCustomer.getId();
             }
-            
+
             // Create a new customer if not found
-            com.stripe.param.CustomerCreateParams.Builder customerParamsBuilder = com.stripe.param.CustomerCreateParams.builder()
-                .setEmail(email);
+            com.stripe.param.CustomerCreateParams.Builder customerParamsBuilder = com.stripe.param.CustomerCreateParams
+                    .builder()
+                    .setEmail(email);
 
             if (name != null && !name.isBlank()) {
                 customerParamsBuilder.setName(name);
             }
-            
+
             com.stripe.model.Customer newCustomer = com.stripe.model.Customer.create(
-                customerParamsBuilder.build()
-            );
-            
+                    customerParamsBuilder.build());
+
             return newCustomer.getId();
-            
+
         } catch (StripeException e) {
             log.warn("Failed to get or create customer for email: {}", email, e);
             return null; // Return null if customer creation fails
@@ -842,7 +850,7 @@ public class StripePaymentStrategy implements PaymentStrategy {
      */
     private void handleStripeError(PaymentTransaction transaction, StripeException e) {
         String errorMessage = getUserFriendlyMessage(e);
-        
+
         transaction.setStatus(PaymentStatus.FAILED);
         transaction.setGatewayStatus("ERROR");
         transaction.setFailureReason(errorMessage);
@@ -856,7 +864,7 @@ public class StripePaymentStrategy implements PaymentStrategy {
      */
     private void handleStripeRefundError(PaymentTransaction refundTransaction, StripeException e) {
         String errorMessage = getUserFriendlyMessage(e);
-        
+
         refundTransaction.setStatus(PaymentStatus.REFUND_FAILED);
         refundTransaction.setGatewayStatus("ERROR");
         refundTransaction.setFailureReason(errorMessage);
@@ -873,7 +881,7 @@ public class StripePaymentStrategy implements PaymentStrategy {
         if (errorCode == null) {
             return "Payment processing failed. Please try again.";
         }
-        
+
         return switch (errorCode) {
             case "card_declined" -> "Your card was declined. Please try a different payment method.";
             case "expired_card" -> "Your card has expired. Please use a different payment method.";

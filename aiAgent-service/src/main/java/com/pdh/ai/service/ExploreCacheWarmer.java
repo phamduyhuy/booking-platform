@@ -22,30 +22,42 @@ public class ExploreCacheWarmer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         logger.info("🚀 [CACHE-WARMER] Starting explore cache warming...");
-        
+
         // Warm up caches asynchronously to not block application startup
-        // Thread.sleep(10_000); // Delay to allow other services to initialize
         CompletableFuture
-        .runAsync(this::warmupCaches)
-            .whenComplete((result, throwable) -> {
-                if (throwable != null) {
-                    logger.error("❌ [CACHE-WARMER] Error during cache warming: {}", throwable.getMessage(), throwable);
-                } else {
-                    logger.info("✅ [CACHE-WARMER] Cache warming completed successfully");
-                }
-            });
+                .runAsync(this::warmupCaches)
+                .whenComplete((result, throwable) -> {
+                    if (throwable != null) {
+                        logger.error("❌ [CACHE-WARMER] Error during cache warming: {}", throwable.getMessage(),
+                                throwable);
+                    } else {
+                        logger.info("✅ [CACHE-WARMER] Cache warming completed successfully");
+                    }
+                });
     }
 
     private void warmupCaches() {
         try {
             logger.info("🔥 [CACHE-WARMER] Warming up default explore cache for Vietnam");
 
-            // Only warm up default explore recommendations for Vietnam
+            // IMPORTANT: Clear old cache first to prevent ClassCastException
+            // This handles cases where serialization format has changed
+            // try {
+            //     logger.info("🗑️ [CACHE-WARMER] Clearing old cache before warming up...");
+            //     exploreCacheService.clearDefaultCache();
+            //     logger.info("✅ [CACHE-WARMER] Old cache cleared successfully");
+            // } catch (Exception clearEx) {
+            //     logger.warn("⚠️ [CACHE-WARMER] Failed to clear old cache (might not exist): {}", clearEx.getMessage());
+            // }
+
+            // Now generate fresh cache
             exploreCacheService.getDefaultExploreRecommendations();
             logger.info("✅ [CACHE-WARMER] Default explore recommendations cached for Vietnam");
 
         } catch (Exception e) {
             logger.error("❌ [CACHE-WARMER] Error warming up caches: {}", e.getMessage(), e);
+            // Don't throw exception to prevent application startup failure
+            // Just log the error and continue
         }
     }
 }

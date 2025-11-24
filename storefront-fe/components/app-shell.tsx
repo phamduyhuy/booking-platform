@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import React, { Suspense } from "react"
-import { Sidebar } from "@/components/sidebar"
+import React, { Suspense } from "react";
+import { Sidebar } from "@/components/sidebar";
 
 interface AppShellProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -20,10 +20,10 @@ export function AppShell({ children }: AppShellProps) {
         <Sidebar />
       </Suspense>
       <div className="flex flex-1 min-w-0 min-h-0 h-full">
-        <div className="flex flex-1 min-w-0 min-h-0 h-full">
+        <div className="flex flex-1 min-w-0 min-h-0 h-full overflow-hidden">
           {children}
         </div>
       </div>
     </div>
-  )
+  );
 }
