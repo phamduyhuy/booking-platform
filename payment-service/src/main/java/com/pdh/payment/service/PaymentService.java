@@ -33,7 +33,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -52,7 +51,7 @@ public class PaymentService {
      */
     @Transactional
     public PaymentTransaction processPayment(Payment payment, PaymentMethod paymentMethod,
-                                           Map<String, Object> additionalData) {
+            Map<String, Object> additionalData) {
         log.info("Processing payment {} using payment method: {}",
                 payment.getPaymentId(), paymentMethod.getProvider());
 
@@ -66,7 +65,8 @@ public class PaymentService {
             // Save transaction
             PaymentTransaction savedTransaction = paymentTransactionRepository.save(transaction);
 
-            // Sync payment status with transaction status (critical for MCP/server-side payments)
+            // Sync payment status with transaction status (critical for MCP/server-side
+            // payments)
             syncPaymentStatusWithTransaction(savedPayment, savedTransaction);
 
             // Publish payment event
@@ -102,25 +102,26 @@ public class PaymentService {
         log.info("Initializing payment record for booking: {}", payment.getBookingId());
 
         Payment persistedPayment = paymentRepository.findByBookingId(payment.getBookingId())
-            .map(existing -> updatePendingPayment(existing, payment))
-            .orElseGet(() -> {
-                payment.setPaymentReference(Payment.generatePaymentReference());
-                payment.setStatus(PaymentStatus.PENDING);
-                return paymentRepository.save(payment);
-            });
+                .map(existing -> updatePendingPayment(existing, payment))
+                .orElseGet(() -> {
+                    payment.setPaymentReference(Payment.generatePaymentReference());
+                    payment.setStatus(PaymentStatus.PENDING);
+                    return paymentRepository.save(payment);
+                });
 
         PaymentTransaction transaction = paymentTransactionRepository
-            .findByPayment_PaymentIdAndTransactionType(persistedPayment.getPaymentId(), PaymentTransactionType.PAYMENT)
-            .stream()
-            .findFirst()
-            .orElseGet(() -> {
-                PaymentTransaction newTransaction = new PaymentTransaction();
-                newTransaction.setPayment(persistedPayment);
-                newTransaction.setTransactionReference(
-                    PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
-                newTransaction.setTransactionType(PaymentTransactionType.PAYMENT);
-                return newTransaction;
-            });
+                .findByPayment_PaymentIdAndTransactionType(persistedPayment.getPaymentId(),
+                        PaymentTransactionType.PAYMENT)
+                .stream()
+                .findFirst()
+                .orElseGet(() -> {
+                    PaymentTransaction newTransaction = new PaymentTransaction();
+                    newTransaction.setPayment(persistedPayment);
+                    newTransaction.setTransactionReference(
+                            PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
+                    newTransaction.setTransactionType(PaymentTransactionType.PAYMENT);
+                    return newTransaction;
+                });
 
         transaction.setAmount(persistedPayment.getAmount());
         transaction.setCurrency(persistedPayment.getCurrency());
@@ -135,7 +136,7 @@ public class PaymentService {
         publishPaymentEvent(persistedPayment, savedTransaction, "PaymentInitialized");
 
         log.info("Payment initialized for booking: {} with transaction: {}",
-            persistedPayment.getBookingId(), savedTransaction.getTransactionId());
+                persistedPayment.getBookingId(), savedTransaction.getTransactionId());
 
         return savedTransaction;
     }
@@ -147,24 +148,25 @@ public class PaymentService {
     public StripePaymentIntentResponse createStripePaymentIntent(StripePaymentIntentRequest request, UUID userId) {
         try {
             Payment basePayment = paymentRepository.findByBookingId(request.getBookingId())
-                .orElseGet(() -> buildPaymentFromRequest(request, userId));
+                    .orElseGet(() -> buildPaymentFromRequest(request, userId));
             basePayment.setUserId(userId);
 
             applyRequestUpdates(basePayment, request);
             Payment persistedPayment = paymentRepository.save(basePayment);
 
             PaymentTransaction transaction = paymentTransactionRepository
-                .findByPayment_PaymentIdAndTransactionType(persistedPayment.getPaymentId(), PaymentTransactionType.PAYMENT)
-                .stream()
-                .findFirst()
-                .orElseGet(() -> {
-                    PaymentTransaction newTransaction = new PaymentTransaction();
-                    newTransaction.setPayment(persistedPayment);
-                    newTransaction.setTransactionReference(
-                        PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
-                    newTransaction.setTransactionType(PaymentTransactionType.PAYMENT);
-                    return newTransaction;
-                });
+                    .findByPayment_PaymentIdAndTransactionType(persistedPayment.getPaymentId(),
+                            PaymentTransactionType.PAYMENT)
+                    .stream()
+                    .findFirst()
+                    .orElseGet(() -> {
+                        PaymentTransaction newTransaction = new PaymentTransaction();
+                        newTransaction.setPayment(persistedPayment);
+                        newTransaction.setTransactionReference(
+                                PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
+                        newTransaction.setTransactionType(PaymentTransactionType.PAYMENT);
+                        return newTransaction;
+                    });
 
             transaction.setAmount(persistedPayment.getAmount());
             transaction.setCurrency(persistedPayment.getCurrency());
@@ -176,7 +178,8 @@ public class PaymentService {
 
             Map<String, Object> additionalData = buildAdditionalStripeData(request);
 
-            PaymentIntent paymentIntent = createOrUpdateStripeIntent(persistedPayment, transaction, request, additionalData);
+            PaymentIntent paymentIntent = createOrUpdateStripeIntent(persistedPayment, transaction, request,
+                    additionalData);
 
             persistedPayment.setGatewayTransactionId(paymentIntent.getId());
             persistedPayment.setGatewayStatus(paymentIntent.getStatus().toUpperCase());
@@ -195,16 +198,16 @@ public class PaymentService {
             }
 
             return StripePaymentIntentResponse.builder()
-                .paymentIntentId(paymentIntent.getId())
-                .clientSecret(paymentIntent.getClientSecret())
-                .status(paymentIntent.getStatus())
-                .amount(persistedPayment.getAmount())
-                .currency(persistedPayment.getCurrency())
-                .description(persistedPayment.getDescription())
-                .transactionId(savedTransaction.getTransactionId())
-                .createdAt(convertStripeTimestamp(paymentIntent.getCreated()))
-                .metadata(metadata)
-                .build();
+                    .paymentIntentId(paymentIntent.getId())
+                    .clientSecret(paymentIntent.getClientSecret())
+                    .status(paymentIntent.getStatus())
+                    .amount(persistedPayment.getAmount())
+                    .currency(persistedPayment.getCurrency())
+                    .description(persistedPayment.getDescription())
+                    .transactionId(savedTransaction.getTransactionId())
+                    .createdAt(convertStripeTimestamp(paymentIntent.getCreated()))
+                    .metadata(metadata)
+                    .build();
 
         } catch (StripeException e) {
             log.error("Failed to create Stripe payment intent for booking: {}", request.getBookingId(), e);
@@ -215,8 +218,8 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public PaymentTransaction getTransactionByGatewayIntentId(String paymentIntentId) {
         return paymentTransactionRepository.findByGatewayTransactionId(paymentIntentId)
-            .orElseThrow(() -> new IllegalArgumentException(
-                "Transaction not found for payment intent: " + paymentIntentId));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction not found for payment intent: " + paymentIntentId));
     }
 
     /**
@@ -226,7 +229,8 @@ public class PaymentService {
     public PaymentTransaction processRefund(UUID originalTransactionId, BigDecimal refundAmount, String reason) {
         log.info("Processing refund for transaction: {} with amount: {}", originalTransactionId, refundAmount);
 
-        Optional<PaymentTransaction> originalTransactionOpt = paymentTransactionRepository.findById(originalTransactionId);
+        Optional<PaymentTransaction> originalTransactionOpt = paymentTransactionRepository
+                .findById(originalTransactionId);
         if (originalTransactionOpt.isEmpty()) {
             throw new IllegalArgumentException("Original transaction not found: " + originalTransactionId);
         }
@@ -235,17 +239,18 @@ public class PaymentService {
 
         try {
             // Process refund using strategy
-            PaymentTransaction refundTransaction = paymentContext.processRefund(originalTransaction, refundAmount, reason);
+            PaymentTransaction refundTransaction = paymentContext.processRefund(originalTransaction, refundAmount,
+                    reason);
 
             // Save refund transaction
             PaymentTransaction savedRefundTransaction = paymentTransactionRepository.save(refundTransaction);
 
             // Publish refund event
-            publishRefundEvent(originalTransaction.getPayment(), savedRefundTransaction, "RefundInitiated");
+            publishRefundEvent(originalTransaction.getPayment(), savedRefundTransaction, "PaymentRefunded");
 
             // If refund completed immediately, publish completion event
             if (savedRefundTransaction.getStatus() == PaymentStatus.REFUND_COMPLETED) {
-                publishRefundEvent(originalTransaction.getPayment(), savedRefundTransaction, "RefundCompleted");
+                publishRefundEvent(originalTransaction.getPayment(), savedRefundTransaction, "PaymentRefunded");
             }
 
             log.info("Refund processing completed for transaction: {}", originalTransactionId);
@@ -278,7 +283,7 @@ public class PaymentService {
         PaymentTransaction savedTransaction = paymentTransactionRepository.save(updatedTransaction);
 
         boolean becameSuccessful = savedTransaction.getStatus().isSuccessful()
-            && (previousStatus == null || !previousStatus.isSuccessful());
+                && (previousStatus == null || !previousStatus.isSuccessful());
 
         if (becameSuccessful) {
             storeStripePaymentMethodIfNeeded(savedTransaction);
@@ -314,8 +319,8 @@ public class PaymentService {
 
         PaymentTransaction existingTransaction = transactionOpt.get();
         if (bookingId != null && existingTransaction.getPayment() != null
-            && existingTransaction.getPayment().getBookingId() != null
-            && !existingTransaction.getPayment().getBookingId().equals(bookingId)) {
+                && existingTransaction.getPayment().getBookingId() != null
+                && !existingTransaction.getPayment().getBookingId().equals(bookingId)) {
             throw new IllegalArgumentException("Transaction does not belong to booking: " + bookingId);
         }
 
@@ -371,7 +376,8 @@ public class PaymentService {
     public void processPayment(UUID bookingId) {
         log.info("Processing payment for booking: {} (legacy method)", bookingId);
         // This is kept for backward compatibility with existing saga orchestration
-        eventPublisher.publishEvent("PaymentProcessed", "Booking", bookingId.toString(), Map.of("bookingId", bookingId));
+        eventPublisher.publishEvent("PaymentProcessed", "Booking", bookingId.toString(),
+                Map.of("bookingId", bookingId));
     }
 
     /**
@@ -397,7 +403,7 @@ public class PaymentService {
         }
 
         Payment payment = paymentOpt.get();
-        
+
         // Find the latest successful transaction
         Optional<PaymentTransaction> latestTransaction = payment.getTransactions().stream()
                 .filter(t -> t.getStatus().isSuccessful())
@@ -423,7 +429,7 @@ public class PaymentService {
         }
 
         Payment payment = paymentOpt.get();
-        
+
         // Update payment status
         payment.setStatus(PaymentStatus.CANCELLED);
         paymentRepository.save(payment);
@@ -453,7 +459,7 @@ public class PaymentService {
         }
 
         Payment payment = paymentOpt.get();
-        
+
         // Update payment status
         payment.setStatus(PaymentStatus.COMPLETED);
         paymentRepository.save(payment);
@@ -477,27 +483,27 @@ public class PaymentService {
      */
     private void syncPaymentStatusWithTransaction(Payment payment, PaymentTransaction transaction) {
         PaymentStatus transactionStatus = transaction.getStatus();
-        
+
         // If transaction succeeded, mark payment as completed
         if (transactionStatus != null && transactionStatus.isSuccessful()) {
-            log.info("Syncing payment {} to COMPLETED based on successful transaction {}", 
+            log.info("Syncing payment {} to COMPLETED based on successful transaction {}",
                     payment.getPaymentId(), transaction.getTransactionId());
             payment.markAsConfirmed();
             paymentRepository.save(payment);
         }
         // If transaction failed, mark payment as failed
-        else if (transactionStatus == PaymentStatus.FAILED || 
-                 transactionStatus == PaymentStatus.DECLINED ||
-                 transactionStatus == PaymentStatus.ERROR) {
-            log.info("Syncing payment {} to FAILED based on failed transaction {}", 
+        else if (transactionStatus == PaymentStatus.FAILED ||
+                transactionStatus == PaymentStatus.DECLINED ||
+                transactionStatus == PaymentStatus.ERROR) {
+            log.info("Syncing payment {} to FAILED based on failed transaction {}",
                     payment.getPaymentId(), transaction.getTransactionId());
-            payment.markAsFailed(transaction.getFailureReason() != null ? 
-                    transaction.getFailureReason() : "Transaction failed");
+            payment.markAsFailed(
+                    transaction.getFailureReason() != null ? transaction.getFailureReason() : "Transaction failed");
             paymentRepository.save(payment);
         }
         // If transaction cancelled
         else if (transactionStatus == PaymentStatus.CANCELLED) {
-            log.info("Syncing payment {} to CANCELLED based on cancelled transaction {}", 
+            log.info("Syncing payment {} to CANCELLED based on cancelled transaction {}",
                     payment.getPaymentId(), transaction.getTransactionId());
             payment.setStatus(PaymentStatus.CANCELLED);
             payment.setFailureReason("Payment cancelled");
@@ -505,7 +511,7 @@ public class PaymentService {
         }
         // Otherwise keep payment status as-is or set to transaction status if different
         else if (transactionStatus != null && payment.getStatus() != transactionStatus) {
-            log.info("Syncing payment {} status from {} to {} based on transaction {}", 
+            log.info("Syncing payment {} status from {} to {} based on transaction {}",
                     payment.getPaymentId(), payment.getStatus(), transactionStatus, transaction.getTransactionId());
             payment.setStatus(transactionStatus);
             paymentRepository.save(payment);
@@ -514,30 +520,31 @@ public class PaymentService {
 
     private void publishPaymentEvent(Payment payment, PaymentTransaction transaction, String eventType) {
         Map<String, Object> eventData = Map.ofEntries(
-            Map.entry("eventType", eventType),
-            Map.entry("paymentId", payment.getPaymentId()),
-            Map.entry("bookingId", payment.getBookingId()),
-            Map.entry("userId", payment.getUserId()),
-            Map.entry("transactionId", transaction.getTransactionId()),
-            Map.entry("amount", transaction.getAmount()),
-            Map.entry("currency", transaction.getCurrency()),
-            Map.entry("status", transaction.getStatus()),
-            Map.entry("provider", transaction.getProvider()),
-            Map.entry("sagaId", payment.getSagaId() != null ? payment.getSagaId() : ""),
-            Map.entry("gatewayTransactionId", transaction.getGatewayTransactionId() != null ? transaction.getGatewayTransactionId() : ""),
-            Map.entry("gatewayStatus", transaction.getGatewayStatus() != null ? transaction.getGatewayStatus() : "")
-        );
+                Map.entry("eventType", eventType),
+                Map.entry("paymentId", payment.getPaymentId()),
+                Map.entry("bookingId", payment.getBookingId()),
+                Map.entry("userId", payment.getUserId()),
+                Map.entry("transactionId", transaction.getTransactionId()),
+                Map.entry("amount", transaction.getAmount()),
+                Map.entry("currency", transaction.getCurrency()),
+                Map.entry("status", transaction.getStatus()),
+                Map.entry("provider", transaction.getProvider()),
+                Map.entry("sagaId", payment.getSagaId() != null ? payment.getSagaId() : ""),
+                Map.entry("gatewayTransactionId",
+                        transaction.getGatewayTransactionId() != null ? transaction.getGatewayTransactionId() : ""),
+                Map.entry("gatewayStatus",
+                        transaction.getGatewayStatus() != null ? transaction.getGatewayStatus() : ""));
 
-        log.info("Publishing payment event: type={}, paymentId={}, bookingId={}, sagaId={}, status={}", 
-                eventType, payment.getPaymentId(), payment.getBookingId(), payment.getSagaId(), transaction.getStatus());
+        log.info("Publishing payment event: type={}, paymentId={}, bookingId={}, sagaId={}, status={}",
+                eventType, payment.getPaymentId(), payment.getBookingId(), payment.getSagaId(),
+                transaction.getStatus());
 
         eventPublisher.publishEvent(
-            eventType,
-            "Payment",
-            payment.getPaymentId().toString(),
-            eventData
-        );
-        
+                eventType,
+                "Payment",
+                payment.getPaymentId().toString(),
+                eventData);
+
         log.info("Payment event published successfully: type={}, paymentId={}", eventType, payment.getPaymentId());
     }
 
@@ -574,7 +581,8 @@ public class PaymentService {
                 return;
             }
 
-            Optional<PaymentMethod> existingByToken = paymentMethodRepository.findByTokenAndIsActiveTrue(stripePaymentMethodId);
+            Optional<PaymentMethod> existingByToken = paymentMethodRepository
+                    .findByTokenAndIsActiveTrue(stripePaymentMethodId);
             if (existingByToken.isPresent()) {
                 PaymentMethod existing = existingByToken.get();
                 if (existing.getUserId().equals(payment.getUserId())) {
@@ -584,12 +592,13 @@ public class PaymentService {
                     }
                 } else {
                     log.warn("Stripe payment method {} already associated with another user ({}), skipping save",
-                        stripePaymentMethodId, existing.getUserId());
+                            stripePaymentMethodId, existing.getUserId());
                 }
                 return;
             }
 
-            com.stripe.model.PaymentMethod stripeMethod = com.stripe.model.PaymentMethod.retrieve(stripePaymentMethodId);
+            com.stripe.model.PaymentMethod stripeMethod = com.stripe.model.PaymentMethod
+                    .retrieve(stripePaymentMethodId);
             if (stripeMethod == null) {
                 return;
             }
@@ -598,12 +607,12 @@ public class PaymentService {
             boolean setAsDefault = Boolean.parseBoolean(metadata.getOrDefault("set_as_default", "false"));
 
             AddPaymentMethodRequest.AddPaymentMethodRequestBuilder builder = AddPaymentMethodRequest.builder()
-                .methodType(methodType)
-                .provider(PaymentProvider.STRIPE)
-                .displayName(buildDisplayName(stripeMethod, methodType))
-                .stripePaymentMethodId(stripePaymentMethodId)
-                .stripeCustomerId(paymentIntent.getCustomer())
-                .setAsDefault(setAsDefault);
+                    .methodType(methodType)
+                    .provider(PaymentProvider.STRIPE)
+                    .displayName(buildDisplayName(stripeMethod, methodType))
+                    .stripePaymentMethodId(stripePaymentMethodId)
+                    .stripeCustomerId(paymentIntent.getCustomer())
+                    .setAsDefault(setAsDefault);
 
             com.stripe.model.PaymentMethod.Card card = stripeMethod.getCard();
             if (card != null) {
@@ -633,7 +642,8 @@ public class PaymentService {
                 }
             }
 
-            if (cardHolderName == null && paymentIntent.getShipping() != null && paymentIntent.getShipping().getName() != null) {
+            if (cardHolderName == null && paymentIntent.getShipping() != null
+                    && paymentIntent.getShipping().getName() != null) {
                 cardHolderName = paymentIntent.getShipping().getName();
             }
 
@@ -649,11 +659,13 @@ public class PaymentService {
         } catch (StripeException e) {
             log.error("Failed to store Stripe payment method for transaction {}", transaction.getTransactionId(), e);
         } catch (Exception e) {
-            log.error("Unexpected error while storing payment method for transaction {}", transaction.getTransactionId(), e);
+            log.error("Unexpected error while storing payment method for transaction {}",
+                    transaction.getTransactionId(), e);
         }
     }
 
-    private PaymentMethodType determinePaymentMethodType(com.stripe.model.PaymentMethod stripeMethod, PaymentIntent paymentIntent) {
+    private PaymentMethodType determinePaymentMethodType(com.stripe.model.PaymentMethod stripeMethod,
+            PaymentIntent paymentIntent) {
         if (stripeMethod == null) {
             return PaymentMethodType.CREDIT_CARD;
         }
@@ -757,7 +769,7 @@ public class PaymentService {
         payment.setAmount(request.getAmount());
         payment.setCurrency(request.getCurrency().toUpperCase());
         payment.setDescription(Optional.ofNullable(request.getDescription())
-            .orElse("Payment for booking: " + request.getBookingId()));
+                .orElse("Payment for booking: " + request.getBookingId()));
         payment.setMethodType(request.getPaymentMethodType());
         payment.setProvider(PaymentProvider.STRIPE);
         payment.setStatus(PaymentStatus.PENDING);
@@ -799,13 +811,14 @@ public class PaymentService {
     }
 
     private PaymentIntent createOrUpdateStripeIntent(Payment payment, PaymentTransaction transaction,
-                                                    StripePaymentIntentRequest request,
-                                                    Map<String, Object> additionalData) throws StripeException {
+            StripePaymentIntentRequest request,
+            Map<String, Object> additionalData) throws StripeException {
         if (transaction.getGatewayTransactionId() != null) {
             PaymentIntent existingIntent = PaymentIntent.retrieve(transaction.getGatewayTransactionId());
             if (existingIntent != null) {
                 if (canReuseIntent(existingIntent, payment)) {
-                    PaymentIntent updated = stripePaymentStrategy.updateManualPaymentIntent(existingIntent, payment, additionalData, request);
+                    PaymentIntent updated = stripePaymentStrategy.updateManualPaymentIntent(existingIntent, payment,
+                            additionalData, request);
                     transaction.setGatewayTransactionId(updated.getId());
                     return updated;
                 }
@@ -822,9 +835,9 @@ public class PaymentService {
 
     private boolean canReuseIntent(PaymentIntent intent, Payment payment) {
         return intent != null
-            && !isTerminalStripeStatus(intent.getStatus())
-            && intent.getCurrency() != null
-            && intent.getCurrency().equalsIgnoreCase(payment.getCurrency());
+                && !isTerminalStripeStatus(intent.getStatus())
+                && intent.getCurrency() != null
+                && intent.getCurrency().equalsIgnoreCase(payment.getCurrency());
     }
 
     private boolean isTerminalStripeStatus(String status) {
@@ -859,33 +872,34 @@ public class PaymentService {
     }
 
     private void publishRefundEvent(Payment payment, PaymentTransaction refundTransaction, String eventType) {
-        Map<String, Object> eventData = Map.of(
-            "paymentId", payment.getPaymentId(),
-            "bookingId", payment.getBookingId(),
-            "userId", payment.getUserId(),
-            "refundTransactionId", refundTransaction.getTransactionId(),
-            "refundAmount", refundTransaction.getAmount(),
-            "currency", refundTransaction.getCurrency(),
-            "status", refundTransaction.getStatus(),
-            "provider", refundTransaction.getProvider(),
-            "originalTransactionId", refundTransaction.getOriginalTransaction() != null ?
-                refundTransaction.getOriginalTransaction().getTransactionId() : "",
-            "sagaId", payment.getSagaId() != null ? payment.getSagaId() : ""
-        );
+        Map<String, Object> eventData = new HashMap<>();
+        eventData.put("eventType", eventType);
+        eventData.put("paymentId", payment.getPaymentId());
+        eventData.put("bookingId", payment.getBookingId());
+        eventData.put("userId", payment.getUserId());
+        eventData.put("refundTransactionId", refundTransaction.getTransactionId());
+        eventData.put("refundAmount", refundTransaction.getAmount());
+        eventData.put("currency", refundTransaction.getCurrency());
+        eventData.put("status", refundTransaction.getStatus());
+        eventData.put("provider", refundTransaction.getProvider());
+        eventData.put("originalTransactionId",
+                refundTransaction.getOriginalTransaction() != null
+                        ? refundTransaction.getOriginalTransaction().getTransactionId()
+                        : "");
+        eventData.put("sagaId", payment.getSagaId() != null ? payment.getSagaId() : "");
 
         eventPublisher.publishEvent(
-            eventType,
-            "Payment",
-            payment.getPaymentId().toString(),
-            eventData
-        );
+                eventType,
+                "Payment",
+                payment.getPaymentId().toString(),
+                eventData);
     }
 
     private PaymentTransaction createFailedTransaction(Payment payment, String errorMessage) {
         PaymentTransaction failedTransaction = new PaymentTransaction();
         failedTransaction.setPayment(payment);
         failedTransaction.setTransactionReference(
-            PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
+                PaymentTransaction.generateTransactionReference(PaymentTransactionType.PAYMENT));
         failedTransaction.setTransactionType(PaymentTransactionType.PAYMENT);
         failedTransaction.setStatus(PaymentStatus.FAILED);
         failedTransaction.setAmount(payment.getAmount());

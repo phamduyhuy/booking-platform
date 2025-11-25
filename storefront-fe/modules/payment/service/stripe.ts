@@ -64,7 +64,10 @@ class StripePaymentService {
     try {
       return await apiClient.post<StripeRefundResponse>(
         `${this.baseUrl}/refund/${request.transactionId}`,
-        request
+        {
+          amount: request.amount,
+          reason: request.reason
+        }
       )
     } catch (error) {
       console.error('Error creating refund:', error)

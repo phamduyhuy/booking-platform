@@ -317,7 +317,7 @@ spring:
           options:
             model: gemini-2.5-flash
             temperature: 0.1
-            response-mime-type: application/json
+
 
     mcp:
       client:

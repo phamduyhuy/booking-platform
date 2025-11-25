@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -276,38 +277,20 @@ public class BackofficePaymentService {
         BigDecimal totalRefunded = getTotalRefundedAmount(paymentId);
         BigDecimal maxRefundable = payment.getAmount().subtract(totalRefunded);
 
-        if (request.getAmount().compareTo(maxRefundable) > 0) {
+        // If amount is null, refund the full refundable amount
+        BigDecimal refundAmount = request.getAmount() != null ? request.getAmount() : maxRefundable;
+
+        if (refundAmount.compareTo(maxRefundable) > 0) {
             throw new RuntimeException("Refund amount exceeds refundable amount");
         }
 
         try {
             // Create refund transaction
-            PaymentTransaction refundTransaction = new PaymentTransaction();
-            refundTransaction.setPayment(payment);
-            refundTransaction.setTransactionReference(
-                    PaymentTransaction.generateTransactionReference(PaymentTransactionType.REFUND));
-            refundTransaction.setTransactionType(PaymentTransactionType.REFUND);
-            refundTransaction.setAmount(request.getAmount());
-            refundTransaction.setCurrency(payment.getCurrency());
-            refundTransaction.setStatus(PaymentStatus.COMPLETED);
-            refundTransaction.setProvider(payment.getProvider());
-            refundTransaction.setGatewayTransactionId("REFUND_" + UUID.randomUUID().toString());
-            refundTransaction.setDescription(request.getReason());
-
-            refundTransaction = paymentTransactionRepository.save(refundTransaction);
-
-            // Update payment total refunded amount
-            BigDecimal newTotalRefunded = totalRefunded.add(request.getAmount());
-            if (newTotalRefunded.compareTo(payment.getAmount()) >= 0) {
-                payment.setStatus(PaymentStatus.REFUND_COMPLETED);
-            }
-
-            paymentRepository.save(payment);
-
-            // Publish refund event
-            publishPaymentEvent(payment, "PAYMENT_REFUNDED");
-
-            log.info("Refund processed successfully: {}", refundTransaction.getTransactionId());
+            Optional<PaymentTransaction> transaction = paymentTransactionRepository
+                    .findByGatewayTransactionId(payment
+                            .getGatewayTransactionId());
+            PaymentTransaction refundTransaction = paymentService.processRefund(transaction.get().getTransactionId(),
+                    refundAmount, request.getReason());
             return refundTransaction;
 
         } catch (Exception e) {
@@ -335,7 +318,7 @@ public class BackofficePaymentService {
         payment = paymentRepository.save(payment);
 
         // Publish cancellation event
-        publishPaymentEvent(payment, "PAYMENT_CANCELLED");
+        publishPaymentEvent(payment, "PaymentCancelled");
 
         return payment;
     }
@@ -568,7 +551,7 @@ public class BackofficePaymentService {
             eventData.put("timestamp", LocalDateTime.now());
 
             // This would use your outbox event service
-            // outboxEventService.publishEvent(eventType, eventData);
+            outboxEventService.publishEvent(eventType, "Payment", payment.getPaymentId().toString(), eventData);
 
             log.info("Published payment event: {} for payment: {}", eventType, payment.getPaymentId());
         } catch (Exception e) {
@@ -627,9 +610,9 @@ public class BackofficePaymentService {
             result.put("stripeCreated", pi.getCreated());
 
             // Local DB data for comparison
-            result.put("localAmount", payment.getAmount().multiply(new java.math.BigDecimal("100")).longValue()); // Convert
-                                                                                                                  // to
-                                                                                                                  // cents
+            result.put("localAmount", payment.getAmount().longValue()); // Convert
+                                                                        // to
+                                                                        // cents
             result.put("localCurrency", payment.getCurrency());
             result.put("localTransactionStatus", latest.getStatus().name());
 
