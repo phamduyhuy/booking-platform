@@ -1,16 +1,12 @@
 package com.pdh.ai.agent;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import com.pdh.ai.agent.tools.CurrentDateTimeZoneTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import com.pdh.ai.agent.advisor.CustomMessageChatMemoryAdvisor;
 import com.pdh.ai.agent.guard.InputValidationGuard;
-import com.pdh.ai.agent.guard.ScopeGuard;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClient.CallResponseSpec;
 import org.springframework.ai.chat.client.advisor.StructuredOutputValidationAdvisor;
@@ -103,10 +99,34 @@ public class CoreAgent {
         * userId
         * amount & currency
         * paymentMethodId (selected by user)
-
+      
+      **CRITICAL: ONE-TIME PAYMENT RULE**:
+      - **Call process_payment EXACTLY ONCE per booking**
+      - **IMMEDIATELY after calling, check the response and STOP**:
+        * success=true → Payment complete ✅ Display success, DONE
+        * processing=true → Payment processing ⏳ Display processing status, DONE
+        * success=false → Payment failed ❌ Display error, may retry with DIFFERENT method
+      - **DO NOT call process_payment again to "verify" or "check" the result**
+      - **DO NOT call process_payment if you already called it for this bookingId in this conversation**
+      - To check payment status AFTER process_payment call → Use `get_booking_payment_status` tool instead
+      
+      **DUPLICATE PAYMENT PREVENTION**:
+      - Track in conversation: Have I called process_payment for this bookingId? YES → NEVER call again
+      - If user says "try payment again" AFTER you already called process_payment:
+        1. First call `get_booking_payment_status` to check current status
+        2. If already COMPLETED/CONFIRMED → Tell user payment is done, do NOT retry
+        3. If FAILED → May retry ONCE with DIFFERENT paymentMethodId
+        4. If PROCESSING → Tell user to wait, do NOT retry
+      - Common mistake to AVOID:
+        ❌ Call process_payment → Get success response → Call process_payment again to verify → Get error → Tell user payment failed (WRONG! First payment succeeded)
+        ✅ Call process_payment → Get success response → Tell user payment succeeded → STOP
+      
       **4. Verify**
-      - Check `process_payment` result.
-      - If successful, confirm to user: "Payment successful! Your booking is confirmed."
+      - Display the process_payment response to user immediately
+      - If successful: "✅ Payment successful! Transaction ID: [transactionId]. Your booking is confirmed."
+      - If processing: "⏳ Payment is processing. I'll monitor the status for you."
+      - If failed: "❌ Payment failed: [failureReason]. Would you like to try a different payment method?"
+      - **NEVER call process_payment twice** - it's not idempotent for the same booking
 
       ## BOOKING FLOW
       **1. Search & Present**
@@ -153,9 +173,11 @@ public class CoreAgent {
       Wait for explicit "Yes"/"Confirm"
       Set requiresConfirmation=true and include confirmationContext with operation details.
       If no confirmation needed, set requiresConfirmation=false and OMIT confirmationContext field entirely (do not set to null).
+      If user already confirmed in prompt, proceed to booking creation and move to payment step. So no need to show complete summary again.
 
       **4. Create Booking**
       **CRITICAL FLIGHT BOOKING RULES**:
+      - MUST wait for user confirmation before proceeding call create_booking tool
       - Use the EXACT flight object from search_flights result
       - PRESERVE these fields from search result (exact format):
         * departureDateTime (ISO 8601 string with timezone, e.g., "2025-11-16T20:45:00+07:00")
@@ -175,6 +197,19 @@ public class CoreAgent {
       - ALWAYS pass userId as FIRST parameter: create_booking(userId="{userId}", bookingPayload=...)
       - userId value comes from the User id field in this prompt (see bottom)
       - Construct complete JSON payload (see tool descriptions) and call create_booking
+      
+      **DUPLICATE BOOKING PREVENTION**:
+      - **NEVER** call create_booking multiple times for the same flight/hotel/combo
+      - Track bookingId from create_booking response in conversation context
+      - If user requests changes AFTER booking is created:
+        1. First call `cancel_booking` with the existing bookingId
+        2. Wait for successful cancellation confirmation
+        3. Then create NEW booking with updated details
+      - If booking creation fails, you MAY retry ONCE with same payload
+      - Example scenario:
+        * User: "Book this flight" → Call create_booking → Save bookingId
+        * User: "Actually, I want to add another passenger" → Call cancel_booking(bookingId) → Then create_booking with new passenger count
+      - **DO NOT** create multiple bookings for the same search result without cancelling previous ones
 
       **AFTER SUCCESSFUL BOOKING CREATION**:
       When create_booking returns success=true, you MUST inform the user with:
@@ -192,9 +227,26 @@ public class CoreAgent {
       Then IMMEDIATELY initiate the **PAYMENT FLOW**:
       1. Call `get_user_stored_payment_methods`
       2. Ask user if they want to pay using their default method or select another.
+      3. If user don't have any payment method, ask them to add a new payment method
 
       ⚠️ Note: Your booking will be held for 15 minutes. Please complete payment soon to confirm your reservation.
       Be friendly, congratulate the user, and clearly guide them to the payment step.
+      
+      **CRITICAL: After process_payment succeeds, IMMEDIATELY CHECK THE RESPONSE**:
+      - If response.success === true OR response.processing === true:
+        * **STOP COMPLETELY** - Do NOT call process_payment again
+        * Display success message to user with transaction details
+        * Inform user their booking is confirmed/processing
+        * **DO NOT** attempt to "verify" or "retry" payment
+      - Payment tool is IDEMPOTENT - calling it twice with same bookingId will fail on second attempt
+      - Example correct flow:
+        1. Call process_payment → response: {success: true, transactionId: "xyz"}
+        2. Tell user: "✅ Payment successful! Transaction ID: xyz. Your booking is confirmed."
+        3. **DONE** - Do nothing else with payment
+      - Example WRONG flow (DO NOT DO THIS):
+        1. Call process_payment → response: {success: true}
+        2. Call process_payment again to "verify" → ERROR (duplicate payment attempt)
+        3. Tell user payment failed ❌ (INCORRECT - first payment actually succeeded!)
 
       **5. Track Status**
       - Save bookingId/sagaId/bookingReference from response
@@ -227,26 +279,22 @@ public class CoreAgent {
       InputValidationGuard inputValidationGuard,
       GoogleGenAiChatModel googleGenAiChatModel) {
 
-
-
     // Advisors
     CustomMessageChatMemoryAdvisor memoryAdvisor = CustomMessageChatMemoryAdvisor.builder(chatMemory)
         .build();
-    var toolCallAdvisor = ToolCallAdvisor.builder()
-        .toolCallingManager(toolCallingManager)
-        .advisorOrder(BaseAdvisor.HIGHEST_PRECEDENCE + 300)
-        .build();
+
 
     StructuredOutputValidationAdvisor validationAdvisor = StructuredOutputValidationAdvisor.builder()
         .outputType(StructuredChatPayload.class)
         .maxRepeatAttempts(3)
         .advisorOrder(BaseAdvisor.HIGHEST_PRECEDENCE + 1000)
         .build();
-
+    
     this.chatClient = ChatClient.builder(googleGenAiChatModel)
         .defaultToolCallbacks(toolCallbackProvider)
-        .defaultAdvisors(memoryAdvisor, validationAdvisor, toolCallAdvisor)
+        .defaultAdvisors(memoryAdvisor, validationAdvisor)
         .defaultTools(currentDateTimeZoneTool)
+
         .build();
 
   }
@@ -263,7 +311,7 @@ public class CoreAgent {
     logger.info("[SYNC-TOOL-TRACKER] Starting processSyncStructured - conversationId: {}, userId: {}", conversationId,
         userId);
     logger.info("[SYNC-TOOL-TRACKER] User message: {}", message);
-   
+
     return Mono.fromCallable(() -> {
       // Extract username from conversationId (format: username:actualConvId)
       String username = getUsernameFromConversationId(conversationId);
@@ -296,28 +344,14 @@ public class CoreAgent {
         return rawResponse.entity(beanOutputConverter);
       } catch (Exception e) {
         // Try to parse as JSON using Spring AI's BeanOutputConverter
-        try {
-          StructuredChatPayload result = beanOutputConverter.convert(rawResponse.content());
+        logger.warn("[SYNC-TOOL-TRACKER] Failed to parse as JSON, using raw content as message: {}",
+            e.getMessage());
+        logger.debug("[SYNC-TOOL-TRACKER] Raw response: {}",
+            rawResponse.content().substring(0, Math.min(200, rawResponse.content().length())));
 
-          logger.info("[SYNC-TOOL-TRACKER] Successfully parsed structured response: message={}, results={}",
-              result.getMessage() != null
-                  ? result.getMessage().substring(0, Math.min(50, result.getMessage().length()))
-                  : "null",
-              result.getResults() != null ? result.getResults().size() : 0);
-
-          return result;
-
-        } catch (Exception ex) {
-          logger.warn("[SYNC-TOOL-TRACKER] Failed to parse as JSON, using raw content as message: {}",
-              e.getMessage());
-          logger.debug("[SYNC-TOOL-TRACKER] Raw response: {}",
-              rawResponse.content().substring(0, Math.min(200, rawResponse.content().length())));
-
-          // Fallback: Wrap plain text in StructuredChatPayload
-          return buildFallbackResponse(rawResponse.content());
-        }
+        // Fallback: Wrap plain text in StructuredChatPayload
+        return buildFallbackResponse(rawResponse.content());
       }
-      
 
     }).onErrorResume(e -> {
       logger.error("[SYNC-TOOL-TRACKER] Error in processSyncStructured: {}", e.getMessage(), e);

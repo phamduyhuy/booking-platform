@@ -15,6 +15,7 @@ export interface StripePaymentIntentRequest {
   paymentMethodType?: string
   savePaymentMethod?: boolean
   setAsDefault?: boolean
+  metadata?: Record<string, string>
 }
 
 export interface StripeBillingAddress {
@@ -83,23 +84,6 @@ export interface StripeBillingDetails {
 export interface StripeCustomer {
   id: string
   email?: string
-  name?: string
-  phone?: string
-  address?: StripeBillingAddress
-  created: number
-}
-
-export interface StripeRefundRequest {
-  paymentIntentId: string
-  amount?: number
-  reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer'
-  metadata?: Record<string, string>
-}
-
-export interface StripeRefundResponse {
-  id: string
-  amount: number
-  currency: string
   status: 'succeeded' | 'pending' | 'failed' | 'canceled'
   reason?: string
   created: number
@@ -176,3 +160,28 @@ export type StripeWebhookEventType =
   | 'customer.updated'
   | 'payment_method.attached'
   | 'payment_method.detached'
+
+export interface StripeRefundRequest {
+  paymentIntentId: string
+  transactionId: string
+  amount: number
+  reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer'
+  metadata?: Record<string, string>
+}
+
+export interface StripeRefundResponse {
+  id: string
+  object: string
+  amount: number
+  balance_transaction: string
+  charge: string
+  created: number
+  currency: string
+  metadata: Record<string, string>
+  payment_intent: string
+  reason: string | null
+  receipt_number: string | null
+  source_transfer_reversal: string | null
+  status: 'succeeded' | 'pending' | 'failed' | 'canceled'
+  transfer_reversal: string | null
+}

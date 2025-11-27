@@ -35,7 +35,7 @@ public class CustomerMcpToolService {
      * passenger/contact information during booking creation, reducing the need
      * to ask users for information that's already in their profile.
      */
-    @McpTool(generateOutputSchema = true, name = "get_customer_profile", description = "Fetch customer profile information by userId. "
+    @McpTool(name = "get_customer_profile", description = "Fetch customer profile information by userId. "
             +
             "Returns customer's name, email, phone number, and other profile details " +
             "that can be used to auto-fill booking forms. " +

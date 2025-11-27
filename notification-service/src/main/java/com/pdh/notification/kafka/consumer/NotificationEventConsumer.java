@@ -35,8 +35,8 @@ public class NotificationEventConsumer {
     private static final Set<String> SUPPORTED_EVENT_TYPES = Set.of(
             "PaymentFailed",
             "BookingPaymentFailed",
-            "BookingConfirmed"
-    );
+            "BookingConfirmed",
+            "BookingRefunded");
 
     @KafkaListener(topics = { "booking.Booking.events",
             "booking.Payment.events" }, groupId = "notification-saga-outbox-listener", containerFactory = "notificationEventListenerContainerFactory")
@@ -238,6 +238,6 @@ public class NotificationEventConsumer {
         }
         String trimmed = value.trim();
         return (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-               (trimmed.startsWith("[") && trimmed.endsWith("]"));
+                (trimmed.startsWith("[") && trimmed.endsWith("]"));
     }
 }
